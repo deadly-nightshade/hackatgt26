@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** Dev-only: pick which fish this browser is, and jump to meet pages. */
 export default async function WhoAmIPage() {
-  if (!meetConfig.devTools()) notFound();
+  if (!meetConfig.whoamiEnabled()) notFound();
   const users = await getProfileRepository().list();
   return <WhoAmI users={users.map((u) => ({ id: u.id, displayName: u.displayName, isSeed: u.isSeed }))} />;
 }

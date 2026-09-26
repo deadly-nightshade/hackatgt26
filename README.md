@@ -46,6 +46,7 @@ See [.env.example](.env.example). Summary:
 | `ONBOARDING_WANT_TO_TRY` | Include the optional 4th question (default `true`) |
 | `FORCE_MEET_OUTCOME` | `friends` or `clammed_up` forces the roll. Ignored in production unless `DEMO_MODE=true` |
 | `DEMO_MODE` | Allows `FORCE_MEET_OUTCOME` in production |
+| `ENABLE_WHOAMI` | Turns on `/dev/whoami` in production (lists every fish and lets anyone switch identity). Always on in dev |
 | `MEET_HANGOUTS` | Re-taps between friends become hangouts that level up (default `true`). `false` → always "already friends" |
 | `HANGOUT_COOLDOWN_MINUTES` | Minimum time between hangouts (default 60; use 1 for a demo) |
 

@@ -60,6 +60,10 @@ export const meetConfig = {
   devTools(): boolean {
     return !meetConfig.isProduction();
   },
+  /** /dev/whoami: always in dev; in production only with ENABLE_WHOAMI=true (lists every fish + lets you switch identity). */
+  whoamiEnabled(): boolean {
+    return meetConfig.devTools() || ["1", "true", "yes", "on"].includes((process.env.ENABLE_WHOAMI ?? "").toLowerCase());
+  },
   /** FORCE_MEET_OUTCOME, honored only outside production or with DEMO_MODE=true. */
   forcedOutcome(): ForcedOutcome | null {
     const v = process.env.FORCE_MEET_OUTCOME;
