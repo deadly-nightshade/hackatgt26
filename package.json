@@ -12,7 +12,8 @@
     "audio:questions": "tsx scripts/generate-question-audio.ts",
     "import:profiles": "tsx scripts/import-profiles.ts",
     "seed:fish": "tsx scripts/seed-fish.ts",
-    "meet:pair": "tsx scripts/meet-pair.ts"
+    "meet:pair": "tsx scripts/meet-pair.ts",
+    "list:fish": "tsx scripts/list-fish.ts"
   },
   "dependencies": {
     "@elevenlabs/react": "^1.15.2",

@@ -74,3 +74,4 @@ a.button.secondary { color: #1f6f8b; }
 .meet-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .meet-actions > * { min-height: 48px; min-width: 120px; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
 .dev-list li { flex-wrap: wrap; align-items: center; }
+.tag-url code { word-break: break-all; }

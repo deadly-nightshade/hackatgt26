@@ -149,7 +149,7 @@ export default function MeetScene({ targetId }: { targetId: string }) {
           disabled={phase.kind !== "playing"}
           aria-live="polite"
         >
-          {phase.kind === "meeting" && <span className="text">{n.a} is swimming over…</span>}
+          {phase.kind === "meeting" && <span className="text">{n.b} is swimming over…</span>}
           {phase.kind === "error" && <span className="text error">{phase.message}</span>}
           {line && (
             <>

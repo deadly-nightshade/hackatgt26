@@ -26,6 +26,7 @@ With the default `AI_MODE=mock`, the whole flow runs with **zero API calls**: tr
 | `npm run extract:fixtures [-- --only rich,messy]` | Runs `extractProfile` on `fixtures/answers/*.json` and checks each result: schema valid, every interest has evidence, and none of the fixture's `mustNotContain` sensitive terms appear. Needs `AI_MODE=live` for real output |
 | `npm run seed:fish [-- --clear]` | Inserts 5 labeled seed fish (`isSeed: true`, ids `seed-1-…` to `seed-5-…`) covering strong overlap, close-only overlap, a bridge only, zero overlap and a near-twin. Idempotent. `--clear` removes them and their pairs/attempts |
 | `npm run meet:pair -- <idA> <idB> [--attempts N] [--hangouts N] [--ignore-cooldown] [--reset] [--regenerate] [--force friends\|clammed_up]` | Runs the meet pipeline from the terminal and prints the analysis, similarity, pFail/roll and script. Writes to storage like a real tap. `--reset` deletes the pair first |
+| `npm run list:fish [-- <baseUrl>]` | Lists every fish with its id and NFC tag URL (`<baseUrl>/meet/<id>`). Base URL defaults to `PUBLIC_BASE_URL`, then `http://localhost:3000` |
 | `npm run audio:questions [-- --force]` | Generates ElevenLabs TTS for every question into `public/audio/questions/` (skips existing files). Commit the MP3s |
 
 ## Environment
