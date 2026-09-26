@@ -10,7 +10,9 @@
     "test": "vitest run",
     "extract:fixtures": "tsx scripts/extract-fixtures.ts",
     "audio:questions": "tsx scripts/generate-question-audio.ts",
-    "import:profiles": "tsx scripts/import-profiles.ts"
+    "import:profiles": "tsx scripts/import-profiles.ts",
+    "seed:fish": "tsx scripts/seed-fish.ts",
+    "meet:pair": "tsx scripts/meet-pair.ts"
   },
   "dependencies": {
     "@elevenlabs/react": "^1.15.2",

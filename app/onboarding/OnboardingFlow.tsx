@@ -1,6 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { setFishId } from "@/lib/meet/identity";
 import type { OnboardingQuestion } from "@/lib/onboarding/questions";
 import type { Answer, Profile } from "@/lib/profile/schema";
 import AnswerInput from "./AnswerInput";
@@ -50,7 +52,8 @@ function useAudioPlayer() {
   return { play, replay, stop, available, playing };
 }
 
-export default function OnboardingFlow({ questions }: { questions: OnboardingQuestion[] }) {
+export default function OnboardingFlow({ questions, returnTo }: { questions: OnboardingQuestion[]; returnTo: string | null }) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("name");
   const [displayName, setDisplayName] = useState("");
   const [qIndex, setQIndex] = useState(0);
@@ -163,7 +166,9 @@ export default function OnboardingFlow({ questions }: { questions: OnboardingQue
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || `Save failed (${res.status})`);
       setSavedId(json.id);
+      setFishId(json.id);
       setStep("saved");
+      if (returnTo) router.replace(returnTo);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -296,7 +301,7 @@ export default function OnboardingFlow({ questions }: { questions: OnboardingQue
   return (
     <main>
       <h1>Welcome to the island, {profile?.displayName} 🏝️</h1>
-      <p>Your resident profile is saved.</p>
+      <p>Your resident profile is saved.{returnTo ? " Taking you back…" : ""}</p>
       <p className="muted">
         Profile id: <code>{savedId}</code>
       </p>

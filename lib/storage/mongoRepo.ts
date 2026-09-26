@@ -1,17 +1,30 @@
-import { MongoClient, type Collection } from "mongodb";
+import { MongoClient, type Collection, type Db } from "mongodb";
 import { config } from "@/lib/config";
 import type { Answer, Profile } from "@/lib/profile/schema";
-import { newProfileId, printProfile, type ProfileRecord, type ProfileRepository } from "@/lib/storage/profileRepo";
+import {
+  isValidProfileId,
+  newProfileId,
+  printProfile,
+  toStoredProfile,
+  type ProfileListItem,
+  type ProfileRecord,
+  type ProfileRepository,
+  type StoredProfile,
+} from "@/lib/storage/profileRepo";
 
 export type ProfileDocument = Profile & {
   _id: string;
   createdAt: Date;
   updatedAt: Date;
   rawAnswers: Answer[];
+  isSeed?: boolean;
 };
 
 // Reuse one client across hot reloads / warm serverless invocations.
-const g = globalThis as unknown as { __mongo?: Promise<MongoClient>; __mongoIndexes?: Promise<unknown> };
+const g = globalThis as unknown as {
+  __mongo?: Promise<MongoClient>;
+  __mongoIndexes?: Map<string, Promise<unknown>>;
+};
 
 function getClient(uri: string): Promise<MongoClient> {
   g.__mongo ??= new MongoClient(uri, { appName: "seaside-onboarding" }).connect().catch((err) => {
@@ -21,19 +34,34 @@ function getClient(uri: string): Promise<MongoClient> {
   return g.__mongo;
 }
 
+/** The shared database handle (one client per process). */
+export async function getMongoDb(): Promise<Db> {
+  const { uri, db } = config.mongo();
+  return (await getClient(uri)).db(db);
+}
+
+/** Create a collection's indexes once per process (retried if creation fails). */
+export async function ensureIndexes(key: string, create: () => Promise<unknown>): Promise<void> {
+  g.__mongoIndexes ??= new Map();
+  let p = g.__mongoIndexes.get(key);
+  if (!p) {
+    p = create().catch((err) => {
+      g.__mongoIndexes?.delete(key);
+      throw err;
+    });
+    g.__mongoIndexes.set(key, p);
+  }
+  await p;
+}
+
 /** Pretty-prints (like console mode), then inserts into `profiles`. */
 export class MongoProfileRepository implements ProfileRepository {
   private async collection(): Promise<Collection<ProfileDocument>> {
-    const { uri, db } = config.mongo();
-    const col = (await getClient(uri)).db(db).collection<ProfileDocument>("profiles");
+    const col = (await getMongoDb()).collection<ProfileDocument>("profiles");
     // Tag indexes for future overlap queries between residents.
-    g.__mongoIndexes ??= col
-      .createIndexes([{ key: { "interests.tag": 1 } }, { key: { "wantsToTry.tag": 1 } }])
-      .catch((err) => {
-        g.__mongoIndexes = undefined;
-        throw err;
-      });
-    await g.__mongoIndexes;
+    await ensureIndexes("profiles", () =>
+      col.createIndexes([{ key: { "interests.tag": 1 } }, { key: { "wantsToTry.tag": 1 } }]),
+    );
     return col;
   }
 
@@ -48,8 +76,27 @@ export class MongoProfileRepository implements ProfileRepository {
       createdAt: record.createdAt ?? now,
       updatedAt: now,
       rawAnswers: record.rawAnswers,
+      ...(record.isSeed ? { isSeed: true } : {}),
     });
     return { id };
+  }
+
+  async get(id: string): Promise<StoredProfile | null> {
+    if (!isValidProfileId(id)) return null;
+    const doc = await (await this.collection()).findOne({ _id: id });
+    return doc ? toStoredProfile(doc as unknown as Record<string, unknown> & { _id: string }) : null;
+  }
+
+  async list(): Promise<ProfileListItem[]> {
+    const docs = await (await this.collection())
+      .find({}, { projection: { displayName: 1, isSeed: 1, updatedAt: 1 } })
+      .sort({ createdAt: 1 })
+      .toArray();
+    return docs.map((d) => ({ id: d._id, displayName: d.displayName, isSeed: d.isSeed === true, updatedAt: d.updatedAt }));
+  }
+
+  async delete(id: string): Promise<void> {
+    await (await this.collection()).deleteOne({ _id: id });
   }
 }
 

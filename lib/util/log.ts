@@ -16,11 +16,11 @@ export class HttpError extends Error {
 }
 
 /** Wraps a route handler: logs route + latency, maps errors to JSON responses. */
-export function withRoute(route: string, handler: (req: Request) => Promise<Response>) {
-  return async (req: Request): Promise<Response> => {
+export function withRoute<Ctx = unknown>(route: string, handler: (req: Request, ctx: Ctx) => Promise<Response>) {
+  return async (req: Request, ctx: Ctx): Promise<Response> => {
     const start = Date.now();
     try {
-      const res = await handler(req);
+      const res = await handler(req, ctx);
       log("route", `${route} ${res.status}`, { ms: Date.now() - start });
       return res;
     } catch (err) {

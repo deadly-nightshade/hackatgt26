@@ -1,6 +1,8 @@
-# hackatgt26: Seaside Market onboarding
+# hackatgt26: Seaside Market
 
-This is the onboarding pipeline from [DESIGN.md](DESIGN.md). The user answers 3–4 prompts by voice or by typing. Speech is transcribed live with ElevenLabs Scribe, so words appear as you talk. Muse Spark then extracts a structured profile, and the user reviews and edits it. The confirmed profile is logged to the terminal and saved (to a JSON file or MongoDB).
+Phase 1 is the onboarding pipeline from [PHASE_1DESIGN.md](PHASE_1DESIGN.md). Phase 2 is the NFC fish meet-up cutscene from [PHASE_2 DESIGN.md](PHASE_2%20DESIGN.md) (see [Meet-ups](#meet-ups-phase-2)).
+
+Onboarding: The user answers 3–4 prompts by voice or by typing. Speech is transcribed live with ElevenLabs Scribe, so words appear as you talk. Muse Spark then extracts a structured profile, and the user reviews and edits it. The confirmed profile is logged to the terminal and saved (to a JSON file or MongoDB).
 
 ## Run it
 
@@ -22,6 +24,8 @@ With the default `AI_MODE=mock`, the whole flow runs with **zero API calls**: tr
 | `npm test` | Vitest: the Zod schema rejects malformed output; toWav → 16 kHz mono s16 (parses the WAV header) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run extract:fixtures [-- --only rich,messy]` | Runs `extractProfile` on `fixtures/answers/*.json` and checks each result: schema valid, every interest has evidence, and none of the fixture's `mustNotContain` sensitive terms appear. Needs `AI_MODE=live` for real output |
+| `npm run seed:fish [-- --clear]` | Inserts 5 labeled seed fish (`isSeed: true`, ids `seed-1-…` to `seed-5-…`) covering strong overlap, close-only overlap, a bridge only, zero overlap and a near-twin. Idempotent. `--clear` removes them and their pairs/attempts |
+| `npm run meet:pair -- <idA> <idB> [--attempts N] [--hangouts N] [--ignore-cooldown] [--reset] [--regenerate] [--force friends\|clammed_up]` | Runs the meet pipeline from the terminal and prints the analysis, similarity, pFail/roll and script. Writes to storage like a real tap. `--reset` deletes the pair first |
 | `npm run audio:questions [-- --force]` | Generates ElevenLabs TTS for every question into `public/audio/questions/` (skips existing files). Commit the MP3s |
 
 ## Environment
@@ -40,6 +44,10 @@ See [.env.example](.env.example). Summary:
 | `WRITABLE_FS` | `true` locally or on a VPS. Unset on Vercel, which disables the cache and requires `STORAGE=mongo` |
 | `FFMPEG_PATH` | Optional system ffmpeg. Falls back to `ffmpeg-static` |
 | `ONBOARDING_WANT_TO_TRY` | Include the optional 4th question (default `true`) |
+| `FORCE_MEET_OUTCOME` | `friends` or `clammed_up` forces the roll. Ignored in production unless `DEMO_MODE=true` |
+| `DEMO_MODE` | Allows `FORCE_MEET_OUTCOME` in production |
+| `MEET_HANGOUTS` | Re-taps between friends become hangouts that level up (default `true`). `false` → always "already friends" |
+| `HANGOUT_COOLDOWN_MINUTES` | Minimum time between hangouts (default 60; use 1 for a demo) |
 
 ## Layout
 
@@ -61,8 +69,17 @@ lib/
   storage/mongoRepo.ts      MongoProfileRepository (indexes on interests.tag, wantsToTry.tag)
   storage/index.ts          ← the one line that picks the repository
   tts/speak.ts              Speaker interface, ElevenLabsSpeaker, NoopSpeaker
-app/api/…                   thin routes: stt-token, transcribe, onboarding/{check,extract,confirm}, tts
-app/onboarding/             barebones UI (record/type → follow-up → review → confirm)
+  meet/config.ts            every meet tunable: roll/score constants, levels, cooldown, PROMPT_VERSION
+  meet/pipeline.ts          runMeet(): load → cache → analysis → guard → score → dialogue → roll → script
+  meet/ai.ts                MeetAI interface: MuseMeetAI (live), MockMeetAI, heuristic/fallback analysis
+  meet/prompt.ts            trimmed profile view + analysis/dialogue/scene prompts
+  meet/guard.ts, score.ts, roll.ts, templates.ts   pure + unit-tested
+  storage/pairRepo.ts       PairRepository + FilePairRepository (data/pairs, data/meet-attempts)
+  storage/mongoPairRepo.ts  MongoPairRepository (`pairs`, `meetAttempts`)
+app/api/…                   thin routes: stt-token, transcribe, onboarding/{check,extract,confirm}, tts, meet, pairs, users/[id]/public
+app/onboarding/             barebones UI (record/type → follow-up → review → confirm); sets localStorage fishId
+app/meet/[targetId]/        the cutscene (two rectangles + tap-to-advance dialogue box)
+app/dev/whoami/             dev-only identity switcher (404 in production)
 ```
 
 ### Notes
@@ -72,6 +89,16 @@ app/onboarding/             barebones UI (record/type → follow-up → review �
 - **Muse Spark always reasons.** Its reasoning tokens count against `max_tokens`, and `reasoning_effort: "none"` is rejected. Extraction uses `low` with an 8k cap, and the answer check uses `minimal` with an 800 cap. A cap that's too low gives an empty completion with `finish_reason=length`. The usage log shows reasoning tokens separately.
 - The terminal prints each live call and a running session total (`[ai-usage] session total: …`).
 - The answer check is skipped for transcripts over 40 words, and the client calls it at most once per question.
+
+## Meet-ups (Phase 2)
+
+Each fish's NFC tag holds `https://<domain>/meet/<userId>`. Tapping a tag opens the page, which reads your id from `localStorage.fishId`. With no id, it sends you through onboarding and brings you back afterwards. The page then plays the cutscene from `POST /api/meet`.
+
+- **Credits:** the first meet of a pair makes 2 model calls (analysis + both dialogue variants), and the result is cached on the `pairs` document. Retries and re-taps make 0. The cache is invalidated by `PROMPT_VERSION`, by the model (so mock output never passes as live), or when either profile's `updatedAt` changes. A friendship's status and level survive regeneration. `?regenerate=1` forces it, dev only.
+- **Hallucination guard:** shared interests and bridges that cite tags missing from the right profile are dropped and logged. If nothing is left, the AI gets one retry with the error. If either call still fails, the cutscene uses exact tag matches and template lines, and that fallback isn't cached.
+- **Roll:** `pFail = clamp(0.05 + 0.35·(1 − similarity), 0.05, 0.40) × 0.5^(fails since last success)`.
+- **Hangouts (stretch):** a re-tap between friends outside the cooldown is a hangout. Levels are Friends → Good Friends (1 hangout) → Close Friends (3) → Best Fishes (6). Scenes are generated lazily, 3 per AI call, on the first hangout. A new batch is generated only after a level-up, capped at one batch per level.
+- **Try it locally:** `npm run seed:fish`, then open `/dev/whoami`, pick who you are, and click **Meet →**.
 
 ## Deploy
 

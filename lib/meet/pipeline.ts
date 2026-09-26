@@ -1,0 +1,331 @@
+import { randomUUID } from "node:crypto";
+import { getUsageTotals } from "@/lib/ai/usage";
+import { heuristicAnalysis, type MeetAI } from "@/lib/meet/ai";
+import { LEVELS, levelFor, levelName, meetConfig, PROMPT_VERSION, type ForcedOutcome } from "@/lib/meet/config";
+import { rollMeet } from "@/lib/meet/roll";
+import {
+  pairKeyOf,
+  sortIds,
+  type Analysis,
+  type DialogueLine,
+  type MeetAttempt,
+  type MeetOutcome,
+  type MeetResponse,
+  type Pair,
+} from "@/lib/meet/schema";
+import { scoreAnalysis } from "@/lib/meet/score";
+import {
+  alreadyFriendsScript,
+  clammedUpScript,
+  cooldownScript,
+  fallbackHangoutLines,
+  fallbackMiddle,
+  friendsScript,
+  hangoutScript,
+  planText,
+  type ScriptInput,
+} from "@/lib/meet/templates";
+import type { PairRepository } from "@/lib/storage/pairRepo";
+import type { ProfileRepository, StoredProfile } from "@/lib/storage/profileRepo";
+import { HttpError, log } from "@/lib/util/log";
+
+export type MeetDeps = {
+  profiles: ProfileRepository;
+  pairs: PairRepository;
+  ai: MeetAI;
+  random?: () => number;
+  now?: () => Date;
+  forcedOutcome?: ForcedOutcome | null;
+  hangoutsEnabled?: boolean;
+  cooldownMs?: number;
+};
+
+export type MeetInput = {
+  initiatorId: string;
+  targetId: string;
+  /** Dev only: ignore the cached analysis/dialogue. */
+  regenerate?: boolean;
+  /** CLI only: skip the hangout cooldown. */
+  ignoreCooldown?: boolean;
+  includeDebug?: boolean;
+};
+
+/** Cached AI content for a pair, or the non-cached fallback. */
+type Content = {
+  analysis: Analysis;
+  similarity: number;
+  dialogue: { friendsLines: DialogueLine[]; clammedUpLines: DialogueLine[] };
+  usedFallback: boolean;
+};
+
+// Concurrent first taps of the same pair share one generation (no double spend).
+const g = globalThis as unknown as { __meetInflight?: Map<string, Promise<Content>> };
+const inflight = (g.__meetInflight ??= new Map());
+
+const swap = (s: DialogueLine["speaker"]): DialogueLine["speaker"] => (s === "a" ? "b" : s === "b" ? "a" : s);
+
+export function newPair(pairKey: string, userIds: [string, string], now: Date): Pair {
+  return { _id: pairKey, pairKey, userIds, status: "strangers", createdAt: now, level: 0, hangoutCount: 0, hangoutScenes: [], sceneBatchesGenerated: 0 };
+}
+
+export function isCacheValid(pair: Pair | null, model: string, a: StoredProfile, b: StoredProfile): boolean {
+  return !!(
+    pair?.analysis &&
+    pair.dialogue &&
+    pair.similarity !== undefined &&
+    pair.promptVersion === PROMPT_VERSION &&
+    pair.model === model &&
+    pair.profilesUpdatedAt?.[0]?.getTime() === a.updatedAt.getTime() &&
+    pair.profilesUpdatedAt?.[1]?.getTime() === b.updatedAt.getTime()
+  );
+}
+
+/** Failed attempts since the last success (drives the pity multiplier). */
+export function failsSinceSuccess(attempts: MeetAttempt[]): number {
+  let n = 0;
+  for (let i = attempts.length - 1; i >= 0; i--) {
+    if (attempts[i].outcome === "clammed_up") n++;
+    else if (attempts[i].outcome === "friends") break;
+  }
+  return n;
+}
+
+/** Steps 4–8: analysis → guard → score → dialogue. Never throws: falls back to templates. */
+async function generateContent(ai: MeetAI, a: StoredProfile, b: StoredProfile, pairKey: string): Promise<Content> {
+  let analysis: Analysis;
+  try {
+    analysis = await ai.analyze(a.profile, b.profile);
+  } catch (err) {
+    log("meet", `analysis failed for ${pairKey}, using template fallback: ${(err as Error).message}`);
+    return fallbackContent(a, b);
+  }
+  const similarity = scoreAnalysis(analysis);
+  try {
+    const dialogue = await ai.dialogue(a.profile, b.profile, analysis);
+    return { analysis, similarity, dialogue, usedFallback: false };
+  } catch (err) {
+    log("meet", `dialogue failed for ${pairKey}, using template lines: ${(err as Error).message}`);
+    return { analysis, similarity, dialogue: { friendsLines: [], clammedUpLines: [] }, usedFallback: true };
+  }
+}
+
+/** Exact tag matches only; template-only middle lines (filled at assembly). */
+function fallbackContent(a: StoredProfile, b: StoredProfile): Content {
+  const analysis = heuristicAnalysis(a.profile, b.profile, { fuzzy: false });
+  return { analysis, similarity: scoreAnalysis(analysis), dialogue: { friendsLines: [], clammedUpLines: [] }, usedFallback: true };
+}
+
+async function loadProfile(deps: MeetDeps, id: string): Promise<StoredProfile> {
+  const p = await deps.profiles.get(id);
+  if (!p) throw new HttpError(404, `No fish with id ${id}`);
+  return p;
+}
+
+/** POST /api/meet pipeline (see PHASE_2 DESIGN.md). */
+export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetResponse> {
+  const { initiatorId, targetId } = input;
+  if (initiatorId === targetId) throw new HttpError(400, "That's your own tag, silly fish!");
+  const now = (deps.now ?? (() => new Date()))();
+  const callsBefore = getUsageTotals().calls;
+
+  // 1. Load both profiles, in pair order (a = smaller id).
+  const [initiator, target] = await Promise.all([loadProfile(deps, initiatorId), loadProfile(deps, targetId)]);
+  const userIds = sortIds(initiatorId, targetId);
+  const pairKey = pairKeyOf(initiatorId, targetId);
+  const initiatorIsA = userIds[0] === initiatorId;
+  const [A, B] = initiatorIsA ? [initiator, target] : [target, initiator];
+
+  const [existing, attempts] = await Promise.all([deps.pairs.getPair(pairKey), deps.pairs.listAttempts(pairKey)]);
+  const attemptNumber = attempts.length + 1;
+  const pair = existing ?? newPair(pairKey, userIds, now);
+
+  const orient = (lines: DialogueLine[]) => (initiatorIsA ? lines : lines.map((l) => ({ ...l, speaker: swap(l.speaker) })));
+  const scriptInput = (analysis: Analysis, middle: DialogueLine[]): ScriptInput => ({
+    pairKey,
+    attemptNumber,
+    names: { a: initiator.profile.displayName, b: target.profile.displayName },
+    spotlight: analysis.spotlight,
+    plan: planText(analysis, { a: A.profile.displayName, b: B.profile.displayName }, pairKey, attemptNumber),
+    middle: orient(middle),
+  });
+
+  const logAttempt = (outcome: MeetOutcome, pFail: number | null, roll: number | null) =>
+    deps.pairs.logAttempt({ _id: randomUUID(), pairKey, initiatorId, outcome, pFail, roll, createdAt: now });
+
+  const respond = (r: {
+    outcome: MeetOutcome;
+    script: DialogueLine[];
+    similarity: number;
+    analysis: Analysis;
+    pFail?: number | null;
+    roll?: number | null;
+    usedFallback?: boolean;
+    leveledUp?: boolean;
+  }): MeetResponse => {
+    const modelCalls = getUsageTotals().calls - callsBefore;
+    log("meet", `${pairKey} → ${r.outcome}`, {
+      attemptNumber,
+      similarity: round(r.similarity),
+      pFail: r.pFail == null ? null : round(r.pFail),
+      roll: r.roll == null ? null : round(r.roll),
+      level: pair.level,
+      fallback: r.usedFallback ?? false,
+      modelCalls,
+    });
+    return {
+      pairKey,
+      outcome: r.outcome,
+      script: r.script,
+      similarity: r.similarity,
+      attemptNumber,
+      fish: {
+        a: { id: initiatorId, displayName: initiator.profile.displayName },
+        b: { id: targetId, displayName: target.profile.displayName },
+      },
+      level: pair.level,
+      levelName: pair.status === "friends" ? levelName(pair.level) : null,
+      leveledUp: r.leveledUp ?? false,
+      hangoutCount: pair.hangoutCount,
+      ...(input.includeDebug
+        ? { debug: { pFail: r.pFail ?? null, roll: r.roll ?? null, analysis: r.analysis, usedFallback: r.usedFallback ?? false, modelCalls } }
+        : {}),
+    };
+  };
+
+  // 2. Already friends → no AI, no roll.
+  if (pair.status === "friends") {
+    const analysis = pair.analysis ?? fallbackContent(A, B).analysis;
+    const similarity = pair.similarity ?? scoreAnalysis(analysis);
+    if (!(deps.hangoutsEnabled ?? meetConfig.hangoutsEnabled())) {
+      await logAttempt("already_friends", null, null);
+      return respond({ outcome: "already_friends", script: alreadyFriendsScript(scriptInput(analysis, [])), similarity, analysis });
+    }
+    return runHangout({ deps, input, pair, A, B, analysis, similarity, now, scriptInput, logAttempt, respond });
+  }
+
+  // 3–8. Get or create the cached content.
+  let content: Content;
+  const regenerate = !!input.regenerate;
+  if (!regenerate && isCacheValid(existing, deps.ai.model, A, B)) {
+    content = { analysis: pair.analysis!, similarity: pair.similarity!, dialogue: pair.dialogue!, usedFallback: false };
+  } else {
+    let job = inflight.get(pairKey);
+    if (!job) {
+      job = generateContent(deps.ai, A, B, pairKey).finally(() => inflight.delete(pairKey));
+      inflight.set(pairKey, job);
+    }
+    content = await job;
+    if (!content.usedFallback) {
+      Object.assign(pair, {
+        analysis: content.analysis,
+        similarity: content.similarity,
+        dialogue: content.dialogue,
+        promptVersion: PROMPT_VERSION,
+        model: deps.ai.model,
+        profilesUpdatedAt: [A.updatedAt, B.updatedAt],
+      } satisfies Partial<Pair>);
+      await deps.pairs.savePair(pair);
+    }
+  }
+
+  // 9. Roll.
+  const forced = deps.forcedOutcome === undefined ? meetConfig.forcedOutcome() : deps.forcedOutcome;
+  const { outcome, pFail, roll } = rollMeet({
+    similarity: content.similarity,
+    failsSinceSuccess: failsSinceSuccess(attempts),
+    random: deps.random,
+    forced,
+  });
+
+  // 10. Persist the result.
+  const hangouts = deps.hangoutsEnabled ?? meetConfig.hangoutsEnabled();
+  if (outcome === "friends") {
+    Object.assign(pair, { status: "friends", friendsSince: now, level: LEVELS[0].level, hangoutCount: 0 } satisfies Partial<Pair>);
+    await deps.pairs.savePair(pair);
+  }
+  await logAttempt(outcome, pFail, roll);
+
+  // 11. Assemble.
+  const lines = outcome === "friends" ? content.dialogue.friendsLines : content.dialogue.clammedUpLines;
+  const base = scriptInput(content.analysis, lines);
+  if (!lines.length) base.middle = fallbackMiddle(base);
+  const script = outcome === "friends" ? friendsScript(base, hangouts) : clammedUpScript(base);
+  return respond({
+    outcome,
+    script,
+    similarity: content.similarity,
+    analysis: content.analysis,
+    pFail,
+    roll,
+    usedFallback: content.usedFallback,
+    leveledUp: outcome === "friends" && hangouts,
+  });
+}
+
+/** Stretch: a re-tap between friends = a hangout (or a cooldown line). */
+async function runHangout(ctx: {
+  deps: MeetDeps;
+  input: MeetInput;
+  pair: Pair;
+  A: StoredProfile;
+  B: StoredProfile;
+  analysis: Analysis;
+  similarity: number;
+  now: Date;
+  scriptInput: (analysis: Analysis, middle: DialogueLine[]) => ScriptInput;
+  logAttempt: (outcome: MeetOutcome, pFail: number | null, roll: number | null) => Promise<void>;
+  respond: (r: { outcome: MeetOutcome; script: DialogueLine[]; similarity: number; analysis: Analysis; usedFallback?: boolean; leveledUp?: boolean }) => MeetResponse;
+}): Promise<MeetResponse> {
+  const { deps, pair, analysis, similarity, now } = ctx;
+  const cooldownMs = deps.cooldownMs ?? meetConfig.hangoutCooldownMs();
+  const lastTogether = Math.max(pair.lastHangoutAt?.getTime() ?? 0, pair.friendsSince?.getTime() ?? 0);
+
+  if (!ctx.input.ignoreCooldown && now.getTime() - lastTogether < cooldownMs) {
+    await ctx.logAttempt("cooldown", null, null);
+    return ctx.respond({ outcome: "cooldown", script: cooldownScript(ctx.scriptInput(analysis, [])), similarity, analysis });
+  }
+
+  const previousLevel = pair.level;
+  pair.hangoutCount += 1;
+  pair.level = Math.max(pair.level, levelFor(pair.hangoutCount));
+  pair.lastHangoutAt = now;
+  const leveledUp = pair.level > previousLevel;
+
+  let scene = pair.hangoutScenes.find((s) => !s.usedAt);
+  let usedFallback = false;
+  if (!scene) {
+    const firstBatch = pair.hangoutScenes.length === 0;
+    const levelRose = pair.level > (pair.sceneBatchLevel ?? 0);
+    if (firstBatch || (levelRose && pair.sceneBatchesGenerated < LEVELS.length)) {
+      try {
+        const scenes = await deps.ai.scenes(ctx.A.profile, ctx.B.profile, analysis, {
+          levelName: levelName(pair.level),
+          usedTopics: pair.hangoutScenes.map((s) => s.topic),
+        });
+        const fresh = scenes.map((s) => ({ id: randomUUID(), topic: s.topic, lines: s.lines }));
+        pair.hangoutScenes.push(...fresh);
+        pair.sceneBatchesGenerated += 1;
+        pair.sceneBatchLevel = pair.level;
+        scene = fresh[0];
+      } catch (err) {
+        log("meet", `scene generation failed for ${pair.pairKey}, template hangout: ${(err as Error).message}`);
+        usedFallback = true;
+      }
+    } else {
+      // Nothing new to unlock: cycle through the least recently used scene.
+      scene = [...pair.hangoutScenes].sort((x, y) => (x.usedAt?.getTime() ?? 0) - (y.usedAt?.getTime() ?? 0))[0];
+    }
+  }
+  if (scene) scene.usedAt = now;
+
+  await deps.pairs.savePair(pair);
+  await ctx.logAttempt("hangout", null, null);
+
+  const base = ctx.scriptInput(analysis, scene?.lines ?? []);
+  if (!scene) base.middle = fallbackHangoutLines(base);
+  base.level = pair.level;
+  base.leveledUp = leveledUp;
+  return ctx.respond({ outcome: "hangout", script: hangoutScript(base), similarity, analysis, usedFallback, leveledUp });
+}
+
+const round = (x: number) => Math.round(x * 1000) / 1000;

@@ -37,3 +37,40 @@ ul.items li:first-child { border-top: 0; }
 .meter { flex: 0 0 160px; height: 8px; background: #e6dfd3; border-radius: 999px; overflow: hidden; }
 .meter-fill { height: 100%; background: #2e9e6a; transition: width 60ms linear; }
 .live { min-height: 110px; padding: 10px; border: 2px solid #2e9e6a; border-radius: 10px; background: #fff; white-space: pre-wrap; margin: 4px 0 12px; }
+
+/* ── Meet-up cutscene (barebones: rectangles + dialogue box) ─────────────── */
+a.button { display: inline-block; text-decoration: none; font: inherit; padding: 10px 16px; border-radius: 10px; border: 1px solid #1f6f8b; }
+a.button.secondary { color: #1f6f8b; }
+.meet-shell { min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.meet {
+  max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; gap: 16px;
+  padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+  font-size: 1.05rem;
+}
+.stage { flex: 1; display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 180px; }
+.fish { flex: 0 1 42%; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.fish-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fish-body {
+  position: relative; width: 100%; aspect-ratio: 3 / 2; border: 3px solid #1d2a30; border-radius: 8px; background: #fff;
+}
+/* The eye sits on the side facing the other fish. */
+.fish-body .eye { position: absolute; top: 28%; width: 12px; height: 12px; border-radius: 50%; background: #1d2a30; }
+.fish.left .eye { right: 14%; }
+.fish.right .eye { left: 14%; }
+.fish.active .fish-body { border-color: #1f6f8b; background: #eaf5f8; box-shadow: 0 0 0 4px #f6c453; }
+.fish.active .fish-name { color: #1f6f8b; }
+.dialogue {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; min-height: 150px;
+  text-align: left; padding: 16px; border: 3px solid #1d2a30; border-radius: 14px; background: #fff; color: #1d2a30;
+  cursor: pointer; font-size: 1.05rem; position: relative;
+}
+.dialogue:disabled { opacity: 1; cursor: default; }
+.dialogue.end { cursor: default; }
+.dialogue .speaker { font-weight: 700; color: #1f6f8b; }
+.dialogue .text { font-size: 1.1rem; line-height: 1.45; }
+.dialogue .narrator { font-style: italic; }
+.dialogue .next { position: absolute; right: 14px; bottom: 10px; font-size: .8rem; color: #5f6b70; }
+.meet-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.meet-actions > * { min-height: 48px; min-width: 120px; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
+.dev-list li { flex-wrap: wrap; align-items: center; }

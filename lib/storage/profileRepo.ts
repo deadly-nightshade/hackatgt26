@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Answer, Profile } from "@/lib/profile/schema";
+import { ProfileSchema, type Answer, type Profile } from "@/lib/profile/schema";
+import { log } from "@/lib/util/log";
 
 export type ProfileRecord = {
   profile: Profile;
@@ -10,14 +11,35 @@ export type ProfileRecord = {
   /** Only set when importing an existing profile (keeps its original id / timestamp). */
   id?: string;
   createdAt?: Date;
+  /** Test residents from `npm run seed:fish`. */
+  isSeed?: boolean;
 };
+
+/** A saved profile as read back (for meet-ups and dev tools). */
+export type StoredProfile = {
+  id: string;
+  profile: Profile;
+  createdAt: Date;
+  updatedAt: Date;
+  isSeed: boolean;
+};
+
+export type ProfileListItem = { id: string; displayName: string; isSeed: boolean; updatedAt: Date };
 
 export interface ProfileRepository {
   save(record: ProfileRecord): Promise<{ id: string }>;
+  get(id: string): Promise<StoredProfile | null>;
+  list(): Promise<ProfileListItem[]>;
+  delete(id: string): Promise<void>;
 }
 
 export function newProfileId(): string {
   return randomUUID();
+}
+
+/** Ids come from URLs (NFC tags) — only allow safe characters. */
+export function isValidProfileId(id: string): boolean {
+  return /^[A-Za-z0-9_-]{1,64}$/.test(id);
 }
 
 /** Pretty-prints the confirmed profile to the server terminal. */
@@ -26,6 +48,23 @@ export function printProfile(id: string, record: ProfileRecord) {
   console.log(`\n${bar}\n  CONFIRMED PROFILE  ${id}  (${record.profile.displayName})\n${bar}`);
   console.log(JSON.stringify(record.profile, null, 2));
   console.log(`${bar}\n`);
+}
+
+/** Stored document (file or Mongo) → StoredProfile. Invalid profiles are logged and treated as missing. */
+export function toStoredProfile(doc: Record<string, unknown> & { _id: string }): StoredProfile | null {
+  const parsed = ProfileSchema.safeParse(doc); // strips _id / timestamps / rawAnswers
+  if (!parsed.success) {
+    log("profiles", `profile ${doc._id} failed validation, ignoring`, { issues: parsed.error.issues.length });
+    return null;
+  }
+  const date = (v: unknown) => (v ? new Date(v as string) : new Date(0));
+  return {
+    id: doc._id,
+    profile: parsed.data,
+    createdAt: date(doc.createdAt),
+    updatedAt: date(doc.updatedAt),
+    isSeed: doc.isSeed === true,
+  };
 }
 
 /** Terminal + ./data/profiles/<id>.json. Requires WRITABLE_FS=true. */
@@ -41,11 +80,41 @@ export class ConsoleFileRepository implements ProfileRepository {
     await writeFile(
       path.join(this.dir, `${id}.json`),
       JSON.stringify(
-        { _id: id, createdAt, updatedAt: now, ...record.profile, rawAnswers: record.rawAnswers },
+        {
+          _id: id,
+          createdAt,
+          updatedAt: now,
+          ...(record.isSeed ? { isSeed: true } : {}),
+          ...record.profile,
+          rawAnswers: record.rawAnswers,
+        },
         null,
         2,
       ),
     );
     return { id };
+  }
+
+  async get(id: string): Promise<StoredProfile | null> {
+    if (!isValidProfileId(id)) return null;
+    try {
+      const doc = JSON.parse(await readFile(path.join(this.dir, `${id}.json`), "utf8"));
+      return toStoredProfile({ ...doc, _id: id });
+    } catch {
+      return null;
+    }
+  }
+
+  async list(): Promise<ProfileListItem[]> {
+    const files = (await readdir(this.dir).catch(() => [])).filter((f) => f.endsWith(".json"));
+    const items = await Promise.all(files.map((f) => this.get(path.basename(f, ".json"))));
+    return items
+      .filter((p): p is StoredProfile => p !== null)
+      .map((p) => ({ id: p.id, displayName: p.profile.displayName, isSeed: p.isSeed, updatedAt: p.updatedAt }));
+  }
+
+  async delete(id: string): Promise<void> {
+    if (!isValidProfileId(id)) return;
+    await rm(path.join(this.dir, `${id}.json`), { force: true });
   }
 }
