@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { setFishId } from "@/lib/meet/identity";
@@ -305,6 +306,13 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
       <p className="muted">
         Profile id: <code>{savedId}</code>
       </p>
+      {!returnTo && (
+        <p>
+          <Link className="button" href="/world">
+            Go to your island →
+          </Link>
+        </p>
+      )}
     </main>
   );
 }

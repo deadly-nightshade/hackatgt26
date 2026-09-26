@@ -10,8 +10,7 @@ import { pairKeyOf, sortIds, type Analysis, type MeetAttempt, type Pair } from "
 import { scoreAnalysis } from "@/lib/meet/score";
 import { friendsScript, pick, type ScriptInput } from "@/lib/meet/templates";
 import { buildProfile, ExtractedProfileSchema, type Profile } from "@/lib/profile/schema";
-import type { PairRepository } from "@/lib/storage/pairRepo";
-import type { ProfileRepository, StoredProfile } from "@/lib/storage/profileRepo";
+import { MemoryPairs, MemoryProfiles } from "./helpers";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -40,52 +39,6 @@ function rng(seed: number) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-class MemoryProfiles implements ProfileRepository {
-  constructor(public map = new Map<string, StoredProfile>()) {}
-  add(id: string, profile: Profile, updatedAt = new Date("2026-01-01")) {
-    this.map.set(id, { id, profile, createdAt: updatedAt, updatedAt, isSeed: false });
-  }
-  async save(): Promise<{ id: string }> {
-    throw new Error("unused");
-  }
-  async get(id: string) {
-    return this.map.get(id) ?? null;
-  }
-  async list() {
-    return [...this.map.values()].map((p) => ({ id: p.id, displayName: p.profile.displayName, isSeed: false, updatedAt: p.updatedAt }));
-  }
-  async delete(id: string) {
-    this.map.delete(id);
-  }
-}
-
-class MemoryPairs implements PairRepository {
-  pairs = new Map<string, Pair>();
-  attempts: MeetAttempt[] = [];
-  async getPair(k: string) {
-    const p = this.pairs.get(k);
-    return p ? structuredClone(p) : null;
-  }
-  async savePair(p: Pair) {
-    this.pairs.set(p.pairKey, structuredClone(p));
-  }
-  async listPairsForUser(u: string) {
-    return [...this.pairs.values()].filter((p) => p.userIds.includes(u));
-  }
-  async logAttempt(a: MeetAttempt) {
-    this.attempts.push(a);
-  }
-  async listAttempts(k: string) {
-    return this.attempts.filter((a) => a.pairKey === k);
-  }
-  async deleteForUsers() {
-    return 0;
-  }
-  async deletePair(k: string) {
-    this.pairs.delete(k);
-  }
 }
 
 /** Wraps an AI and counts model calls per method. */

@@ -48,7 +48,7 @@ export default function MePage() {
         </button>
       </section>
       <p>
-        <Link href="/">Back to island</Link> · <Link href="/onboarding">Redo onboarding</Link>
+        <Link href="/world">Back to island</Link> · <Link href="/onboarding">Redo onboarding</Link>
       </p>
     </main>
   );

@@ -29,6 +29,19 @@ export class MongoPairRepository implements PairRepository {
     return (await this.pairs()).find({ userIds: userId }).sort({ createdAt: 1 }).toArray();
   }
 
+  async listPairsAmong(userIds: string[]): Promise<Pair[]> {
+    return (await this.pairs()).find({ "userIds.0": { $in: userIds }, "userIds.1": { $in: userIds } }).toArray();
+  }
+
+  async listAttemptsForPairs(pairKeys: string[]): Promise<MeetAttempt[]> {
+    if (!pairKeys.length) return [];
+    return (await this.attempts()).find({ pairKey: { $in: pairKeys } }).sort({ createdAt: 1 }).toArray();
+  }
+
+  async getAttempt(attemptId: string): Promise<MeetAttempt | null> {
+    return (await this.attempts()).findOne({ _id: attemptId });
+  }
+
   async logAttempt(attempt: MeetAttempt): Promise<void> {
     await (await this.attempts()).insertOne(attempt);
   }

@@ -4,9 +4,11 @@ import { heuristicAnalysis, type MeetAI } from "@/lib/meet/ai";
 import { LEVELS, levelFor, levelName, meetConfig, PROMPT_VERSION, type ForcedOutcome } from "@/lib/meet/config";
 import { rollMeet } from "@/lib/meet/roll";
 import {
+  kindOf,
   pairKeyOf,
   sortIds,
   type Analysis,
+  type BumpLine,
   type DialogueLine,
   type MeetAttempt,
   type MeetOutcome,
@@ -55,6 +57,7 @@ type Content = {
   analysis: Analysis;
   similarity: number;
   dialogue: { friendsLines: DialogueLine[]; clammedUpLines: DialogueLine[] };
+  bumpLines: BumpLine[];
   usedFallback: boolean;
 };
 
@@ -101,18 +104,18 @@ async function generateContent(ai: MeetAI, a: StoredProfile, b: StoredProfile, p
   }
   const similarity = scoreAnalysis(analysis);
   try {
-    const dialogue = await ai.dialogue(a.profile, b.profile, analysis);
-    return { analysis, similarity, dialogue, usedFallback: false };
+    const { bumpLines, ...dialogue } = await ai.dialogue(a.profile, b.profile, analysis);
+    return { analysis, similarity, dialogue, bumpLines, usedFallback: false };
   } catch (err) {
     log("meet", `dialogue failed for ${pairKey}, using template lines: ${(err as Error).message}`);
-    return { analysis, similarity, dialogue: { friendsLines: [], clammedUpLines: [] }, usedFallback: true };
+    return { analysis, similarity, dialogue: { friendsLines: [], clammedUpLines: [] }, bumpLines: [], usedFallback: true };
   }
 }
 
 /** Exact tag matches only; template-only middle lines (filled at assembly). */
 function fallbackContent(a: StoredProfile, b: StoredProfile): Content {
   const analysis = heuristicAnalysis(a.profile, b.profile, { fuzzy: false });
-  return { analysis, similarity: scoreAnalysis(analysis), dialogue: { friendsLines: [], clammedUpLines: [] }, usedFallback: true };
+  return { analysis, similarity: scoreAnalysis(analysis), dialogue: { friendsLines: [], clammedUpLines: [] }, bumpLines: [], usedFallback: true };
 }
 
 async function loadProfile(deps: MeetDeps, id: string): Promise<StoredProfile> {
@@ -139,20 +142,19 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
   const attemptNumber = attempts.length + 1;
   const pair = existing ?? newPair(pairKey, userIds, now);
 
+  const names = { a: initiator.profile.displayName, b: target.profile.displayName };
   const orient = (lines: DialogueLine[]) => (initiatorIsA ? lines : lines.map((l) => ({ ...l, speaker: swap(l.speaker) })));
   const scriptInput = (analysis: Analysis, middle: DialogueLine[]): ScriptInput => ({
     pairKey,
     attemptNumber,
-    names: { a: initiator.profile.displayName, b: target.profile.displayName },
+    names,
     spotlight: analysis.spotlight,
     plan: planText(analysis, { a: A.profile.displayName, b: B.profile.displayName }, pairKey, attemptNumber),
     middle: orient(middle),
   });
 
-  const logAttempt = (outcome: MeetOutcome, pFail: number | null, roll: number | null) =>
-    deps.pairs.logAttempt({ _id: randomUUID(), pairKey, initiatorId, outcome, pFail, roll, createdAt: now });
-
-  const respond = (r: {
+  /** Logs the attempt (with the exact script that played) and builds the response. Called once per request. */
+  const respond = async (r: {
     outcome: MeetOutcome;
     script: DialogueLine[];
     similarity: number;
@@ -161,8 +163,29 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
     roll?: number | null;
     usedFallback?: boolean;
     leveledUp?: boolean;
-  }): MeetResponse => {
+  }): Promise<MeetResponse> => {
     const modelCalls = getUsageTotals().calls - callsBefore;
+    await deps.pairs.logAttempt({
+      _id: randomUUID(),
+      pairKey,
+      initiatorId,
+      targetId,
+      initiatorName: names.a,
+      targetName: names.b,
+      outcome: r.outcome,
+      pFail: r.pFail ?? null,
+      roll: r.roll ?? null,
+      attemptNumber,
+      level: pair.level,
+      leveledUp: r.leveledUp ?? false,
+      usedFallback: r.usedFallback ?? false,
+      modelCalls,
+      kind: kindOf(r.outcome),
+      levelAfter: pair.level,
+      levelNameAfter: pair.status === "friends" ? levelName(pair.level) : "Just met",
+      script: r.script.map((l) => ({ ...l, speakerName: l.speaker === "narrator" ? null : names[l.speaker] })),
+      createdAt: now,
+    });
     log("meet", `${pairKey} → ${r.outcome}`, {
       attemptNumber,
       similarity: round(r.similarity),
@@ -197,17 +220,16 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
     const analysis = pair.analysis ?? fallbackContent(A, B).analysis;
     const similarity = pair.similarity ?? scoreAnalysis(analysis);
     if (!(deps.hangoutsEnabled ?? meetConfig.hangoutsEnabled())) {
-      await logAttempt("already_friends", null, null);
       return respond({ outcome: "already_friends", script: alreadyFriendsScript(scriptInput(analysis, [])), similarity, analysis });
     }
-    return runHangout({ deps, input, pair, A, B, analysis, similarity, now, scriptInput, logAttempt, respond });
+    return runHangout({ deps, input, pair, A, B, analysis, similarity, now, scriptInput, respond });
   }
 
   // 3–8. Get or create the cached content.
   let content: Content;
   const regenerate = !!input.regenerate;
   if (!regenerate && isCacheValid(existing, deps.ai.model, A, B)) {
-    content = { analysis: pair.analysis!, similarity: pair.similarity!, dialogue: pair.dialogue!, usedFallback: false };
+    content = { analysis: pair.analysis!, similarity: pair.similarity!, dialogue: pair.dialogue!, bumpLines: pair.bumpLines ?? [], usedFallback: false };
   } else {
     let job = inflight.get(pairKey);
     if (!job) {
@@ -220,6 +242,7 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
         analysis: content.analysis,
         similarity: content.similarity,
         dialogue: content.dialogue,
+        bumpLines: content.bumpLines,
         promptVersion: PROMPT_VERSION,
         model: deps.ai.model,
         profilesUpdatedAt: [A.updatedAt, B.updatedAt],
@@ -242,8 +265,10 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
   if (outcome === "friends") {
     Object.assign(pair, { status: "friends", friendsSince: now, level: LEVELS[0].level, hangoutCount: 0 } satisfies Partial<Pair>);
     await deps.pairs.savePair(pair);
+  } else if (!existing && content.usedFallback) {
+    // A clammed-up first meet on the fallback path must still exist as a pair (the world shows "just met" fish).
+    await deps.pairs.savePair(pair);
   }
-  await logAttempt(outcome, pFail, roll);
 
   // 11. Assemble.
   const lines = outcome === "friends" ? content.dialogue.friendsLines : content.dialogue.clammedUpLines;
@@ -273,15 +298,13 @@ async function runHangout(ctx: {
   similarity: number;
   now: Date;
   scriptInput: (analysis: Analysis, middle: DialogueLine[]) => ScriptInput;
-  logAttempt: (outcome: MeetOutcome, pFail: number | null, roll: number | null) => Promise<void>;
-  respond: (r: { outcome: MeetOutcome; script: DialogueLine[]; similarity: number; analysis: Analysis; usedFallback?: boolean; leveledUp?: boolean }) => MeetResponse;
+  respond: (r: { outcome: MeetOutcome; script: DialogueLine[]; similarity: number; analysis: Analysis; usedFallback?: boolean; leveledUp?: boolean }) => Promise<MeetResponse>;
 }): Promise<MeetResponse> {
   const { deps, pair, analysis, similarity, now } = ctx;
   const cooldownMs = deps.cooldownMs ?? meetConfig.hangoutCooldownMs();
   const lastTogether = Math.max(pair.lastHangoutAt?.getTime() ?? 0, pair.friendsSince?.getTime() ?? 0);
 
   if (!ctx.input.ignoreCooldown && now.getTime() - lastTogether < cooldownMs) {
-    await ctx.logAttempt("cooldown", null, null);
     return ctx.respond({ outcome: "cooldown", script: cooldownScript(ctx.scriptInput(analysis, [])), similarity, analysis });
   }
 
@@ -319,7 +342,6 @@ async function runHangout(ctx: {
   if (scene) scene.usedAt = now;
 
   await deps.pairs.savePair(pair);
-  await ctx.logAttempt("hangout", null, null);
 
   const base = ctx.scriptInput(analysis, scene?.lines ?? []);
   if (!scene) base.middle = fallbackHangoutLines(base);

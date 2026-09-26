@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CutscenePlayer, CutsceneStage } from "@/app/_components/Cutscene";
 import { getFishId } from "@/lib/meet/identity";
-import type { DialogueLine, MeetResponse } from "@/lib/meet/schema";
+import type { MeetResponse } from "@/lib/meet/schema";
 
 type Phase =
   | { kind: "resolving" }
@@ -12,8 +13,7 @@ type Phase =
   | { kind: "not_found" }
   | { kind: "error"; message: string }
   | { kind: "meeting" } // fish on screen, waiting for POST /api/meet
-  | { kind: "playing"; meet: MeetResponse; index: number }
-  | { kind: "ended"; meet: MeetResponse };
+  | { kind: "playing"; meet: MeetResponse };
 
 type Names = { a: string; b: string };
 
@@ -56,7 +56,7 @@ export default function MeetScene({ targetId }: { targetId: string }) {
         if (!res.ok) throw new Error(json.error || `Something went wrong (${res.status})`);
         const result = json as MeetResponse;
         if (result.debug) console.log("[meet debug]", result.debug);
-        setPhase({ kind: "playing", meet: result, index: 0 });
+        setPhase({ kind: "playing", meet: result });
       } catch (err) {
         const e = err as Error;
         setPhase({ kind: "error", message: e.name === "TimeoutError" ? "The tide was too slow — try again?" : e.message });
@@ -87,32 +87,13 @@ export default function MeetScene({ targetId }: { targetId: string }) {
     })();
   }, [targetId, router, meet]);
 
-  const advance = useCallback(() => {
-    setPhase((p) => {
-      if (p.kind !== "playing") return p;
-      return p.index + 1 < p.meet.script.length ? { ...p, index: p.index + 1 } : { kind: "ended", meet: p.meet };
-    });
-  }, []);
-
-  useEffect(() => {
-    if (phase.kind !== "playing") return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === " " || e.key === "Enter") {
-        e.preventDefault();
-        advance();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [phase.kind, advance]);
-
   if (phase.kind === "resolving") return <Shell><p className="muted">Finding your fish…</p></Shell>;
   if (phase.kind === "self")
     return (
       <Shell>
         <h1>That&apos;s your own tag, silly fish! 🐟</h1>
         <p>Tap a friend&apos;s tag to meet them.</p>
-        <Link href="/">Back to island</Link>
+        <Link href="/world">Back to island</Link>
       </Shell>
     );
   if (phase.kind === "not_found")
@@ -120,47 +101,29 @@ export default function MeetScene({ targetId }: { targetId: string }) {
       <Shell>
         <h1>Hmm, no fish here 🫧</h1>
         <p>This tag doesn&apos;t belong to any resident (yet). Maybe they haven&apos;t finished onboarding?</p>
-        <Link href="/">Back to island</Link>
+        <Link href="/world">Back to island</Link>
       </Shell>
     );
 
-  const line: DialogueLine | null = phase.kind === "playing" ? phase.meet.script[phase.index] : null;
-  const speaking = line?.speaker ?? null;
   const n = names ?? { a: "…", b: "…" };
 
   return (
     <div className="meet">
-      <div className="stage">
-        <Fish name={n.a} side="left" active={speaking === "a"} />
-        <Fish name={n.b} side="right" active={speaking === "b"} />
-      </div>
-
-      {phase.kind === "ended" ? (
-        <EndScreen
-          meet={phase.meet}
-          onReplay={() => setPhase({ kind: "playing", meet: phase.meet, index: 0 })}
-          onRetry={() => me && meet(me)}
+      {phase.kind === "playing" ? (
+        <CutscenePlayer
+          key={phase.meet.attemptNumber}
+          script={phase.meet.script}
+          names={n}
+          renderEnd={(replay) => <EndScreen meet={phase.meet} onReplay={replay} onRetry={() => me && meet(me)} />}
         />
       ) : (
-        <button
-          type="button"
-          className="dialogue"
-          onClick={advance}
-          disabled={phase.kind !== "playing"}
-          aria-live="polite"
-        >
-          {phase.kind === "meeting" && <span className="text">{n.b} is swimming over…</span>}
-          {phase.kind === "error" && <span className="text error">{phase.message}</span>}
-          {line && (
-            <>
-              {line.speaker !== "narrator" && <span className="speaker">{line.speaker === "a" ? n.a : n.b}</span>}
-              <span className={line.speaker === "narrator" ? "text narrator" : "text"}>{line.text}</span>
-              <span className="next" aria-hidden>
-                ▼
-              </span>
-            </>
-          )}
-        </button>
+        <>
+          <CutsceneStage names={n} speaking={null} />
+          <div className="dialogue" aria-live="polite">
+            {phase.kind === "meeting" && <span className="text">{n.b} is swimming over…</span>}
+            {phase.kind === "error" && <span className="text error">{phase.message}</span>}
+          </div>
+        </>
       )}
       {phase.kind === "error" && me && (
         <div className="meet-actions">
@@ -173,17 +136,6 @@ export default function MeetScene({ targetId }: { targetId: string }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <main className="meet-shell">{children}</main>;
-}
-
-function Fish({ name, side, active }: { name: string; side: "left" | "right"; active: boolean }) {
-  return (
-    <div className={`fish ${side}${active ? " active" : ""}`}>
-      <div className="fish-name">{name}</div>
-      <div className="fish-body">
-        <span className="eye" />
-      </div>
-    </div>
-  );
 }
 
 function EndScreen({ meet, onReplay, onRetry }: { meet: MeetResponse; onReplay: () => void; onRetry: () => void }) {
@@ -203,7 +155,7 @@ function EndScreen({ meet, onReplay, onRetry }: { meet: MeetResponse; onReplay: 
         ) : (
           <button onClick={onReplay}>Replay</button>
         )}
-        <Link className="button secondary" href="/">
+        <Link className="button secondary" href="/world">
           Back to island
         </Link>
       </div>

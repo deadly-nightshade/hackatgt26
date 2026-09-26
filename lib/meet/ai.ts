@@ -14,6 +14,7 @@ import {
 } from "@/lib/meet/prompt";
 import {
   AnalysisSchema,
+  DialogueParseSchema,
   DialogueSchema,
   SceneBatchSchema,
   toJsonSchema,
@@ -25,6 +26,7 @@ import {
 import { formatZodError } from "@/lib/profile/extract";
 import type { Profile } from "@/lib/profile/schema";
 import { log } from "@/lib/util/log";
+import { shortLabel, tidyBumpLines } from "@/lib/world/bumps";
 
 export type Scene = SceneBatch["scenes"][number];
 
@@ -41,7 +43,7 @@ export interface MeetAI {
 
 type Check<T> = { ok: true; value: T } | { ok: false; error: string };
 
-function parseWith<T>(schema: z.ZodType<T>, raw: string): Check<T> {
+function parseWith<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, raw: string): Check<T> {
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -152,12 +154,15 @@ export class MuseMeetAI implements MeetAI {
       maxTokens: 6000,
       temperature: 0.8,
       check: (raw) => {
-        const parsed = parseWith(DialogueSchema, raw);
+        const parsed = parseWith(DialogueParseSchema, raw);
         if (!parsed.ok) return parsed;
         const friends = tidyLines(parsed.value.friendsLines, MIDDLE_LINES, "friendsLines");
         const clammed = tidyLines(parsed.value.clammedUpLines, MIDDLE_LINES, "clammedUpLines");
         if (!friends.ok || !clammed.ok) return { ok: false, error: [friends, clammed].flatMap((c) => (c.ok ? [] : [c.error])).join("\n") };
-        return { ok: true, value: { friendsLines: friends.value, clammedUpLines: clammed.value } };
+        // Bad bump lines never cost a retry: the world falls back to template bubbles.
+        const bumpLines = tidyBumpLines(parsed.value.bumpLines);
+        if (bumpLines.length < parsed.value.bumpLines.length) log("meet-ai", "dropped malformed bumpLines", { kept: bumpLines.length });
+        return { ok: true, value: { friendsLines: friends.value, clammedUpLines: clammed.value, bumpLines } };
       },
     });
   }
@@ -270,6 +275,12 @@ export class MockMeetAI implements MeetAI {
         { speaker: "a", text: `I heard you're into ${topic}…?`, mood: "shy" },
         { speaker: "b", text: `Yeah… maybe we could talk about it more next time.`, mood: "neutral" },
       ],
+      bumpLines: tidyBumpLines([
+        ...analysis.sharedInterests.slice(0, 3).map((s, i) => ({ a: `${shortLabel(s.label)}?`, b: ["same!!", "yesss", "omg me too"][i] })),
+        { a: "water you up to?", b: "just swimming 🐟" },
+        { a: "fin-tastic day!", b: "reel nice" },
+        { a: "snack run later?", b: "always 🍢" },
+      ]),
     };
   }
 

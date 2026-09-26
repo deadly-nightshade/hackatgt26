@@ -24,7 +24,7 @@ With the default `AI_MODE=mock`, the whole flow runs with **zero API calls**: tr
 | `npm test` | Vitest: the Zod schema rejects malformed output; toWav → 16 kHz mono s16 (parses the WAV header) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run extract:fixtures [-- --only rich,messy]` | Runs `extractProfile` on `fixtures/answers/*.json` and checks each result: schema valid, every interest has evidence, and none of the fixture's `mustNotContain` sensitive terms appear. Needs `AI_MODE=live` for real output |
-| `npm run seed:fish [-- --clear]` | Inserts 5 labeled seed fish (`isSeed: true`, ids `seed-1-…` to `seed-5-…`) covering strong overlap, close-only overlap, a bridge only, zero overlap and a near-twin. Idempotent. `--clear` removes them and their pairs/attempts |
+| `npm run seed:fish [-- --for <userId>] [-- --clear]` | Inserts 5 labeled seed fish (`isSeed: true`, ids `seed-1-…` to `seed-5-…`) covering strong overlap, close-only overlap, a bridge only, zero overlap and a near-twin. Idempotent. `--for <userId>` also builds that user a sample `/world`: meets and hangouts at levels 1–4, one stranger, one pair between two residents, all run through the real pipeline with the mock AI (0 model calls). Existing pairs are left alone. `--clear` removes the seeds and their pairs/attempts |
 | `npm run meet:pair -- <idA> <idB> [--attempts N] [--hangouts N] [--ignore-cooldown] [--reset] [--regenerate] [--force friends\|clammed_up]` | Runs the meet pipeline from the terminal and prints the analysis, similarity, pFail/roll and script. Writes to storage like a real tap. `--reset` deletes the pair first |
 | `npm run list:fish [-- <baseUrl>]` | Lists every fish with its id and NFC tag URL (`<baseUrl>/meet/<id>`). Base URL defaults to `PUBLIC_BASE_URL`, then `http://localhost:3000` |
 | `npm run audio:questions [-- --force]` | Generates ElevenLabs TTS for every question into `public/audio/questions/` (skips existing files). Commit the MP3s |
@@ -78,9 +78,16 @@ lib/
   meet/guard.ts, score.ts, roll.ts, templates.ts   pure + unit-tested
   storage/pairRepo.ts       PairRepository + FilePairRepository (data/pairs, data/meet-attempts)
   storage/mongoPairRepo.ts  MongoPairRepository (`pairs`, `meetAttempts`)
-app/api/…                   thin routes: stt-token, transcribe, onboarding/{check,extract,confirm}, tts, meet, pairs, users/[id]/public
+  world/config.ts           every /world tunable: art paths, walkable area, speeds, bump timing
+  world/sim.ts              pure wander/bump/swim-over simulation (unit-tested)
+  world/useWorldSim.ts      the rAF loop: positions in refs, written to the DOM as transforms
+  world/server.ts           getResidentsFor() (who appears), world payload, history, replays
+  world/bumps.ts            bump-line tidy/fallback/generic bubbles
+app/api/…                   thin routes: stt-token, transcribe, onboarding/{check,extract,confirm}, tts, meet, pairs, pairs/[pairKey]/history, attempts/[id], world, users/[id]/{public,profile}
 app/onboarding/             barebones UI (record/type → follow-up → review → confirm); sets localStorage fishId
-app/meet/[targetId]/        the cutscene (two rectangles + tap-to-advance dialogue box)
+app/_components/Cutscene.tsx  the cutscene player (fish sprites + tap-to-advance dialogue), shared by /meet and /world replays
+app/meet/[targetId]/        the NFC meet page
+app/world/                  the island (home screen)
 app/dev/whoami/             dev-only identity switcher (404 in production)
 ```
 
@@ -101,6 +108,15 @@ Each fish's NFC tag holds `https://<domain>/meet/<userId>`. Tapping a tag opens 
 - **Roll:** `pFail = clamp(0.05 + 0.35·(1 − similarity), 0.05, 0.40) × 0.5^(fails since last success)`.
 - **Hangouts (stretch):** a re-tap between friends outside the cooldown is a hangout. Levels are Friends → Good Friends (1 hangout) → Close Friends (3) → Best Fishes (6). Scenes are generated lazily, 3 per AI call, on the first hangout. A new batch is generated only after a level-up, capped at one batch per level.
 - **Try it locally:** `npm run seed:fish`, then open `/dev/whoami`, pick who you are, and click **Meet →**.
+
+## My Fish World (Phase 3)
+
+`/world` is the home screen: your fish plus every fish you've met, wandering the seaside market. It makes **no AI calls**; everything comes from stored data.
+
+- **Who appears:** only fish you've personally met with an NFC tap (a pair with at least one non-cooldown attempt), friends and "just met" strangers alike. Never friends-of-friends. The rule lives in `getResidentsFor()` in `lib/world/server.ts`.
+- **Bumps:** when two fish meet they swap tiny speech bubbles (≤ 4 words). These `bumpLines` are generated inside the existing dialogue call, so there's no extra model call. Older pairs and AI fallbacks use template lines built from their shared interests. Two of your friends with no pair between them say generic things ("blub!", "nice fins").
+- **Cards + history:** tap a fish for its level, friendship date, and the list of past cutscenes. Every attempt now saves the exact script it played, so replays just read it back: they never call `/api/meet`, roll, or change levels. Attempts from before this change say "replay unavailable". There's no meet or retry button here; those only happen by tapping someone's NFC tag.
+- **Try it locally:** `npm run seed:fish -- --for <yourId>`, then `/dev/whoami` → pick yourself → `/world`.
 
 ## Deploy
 

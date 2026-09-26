@@ -48,18 +48,23 @@ a.button.secondary { color: #1f6f8b; }
     calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
   font-size: 1.05rem;
 }
-.stage { flex: 1; display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 180px; }
-.fish { flex: 0 1 42%; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
-.fish-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fish-body {
-  position: relative; width: 100%; aspect-ratio: 3 / 2; border: 3px solid #1d2a30; border-radius: 8px; background: #fff;
+.stage {
+  position: relative; flex: 1; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px;
+  min-height: 220px; padding: 12px 12px 6%; border-radius: 14px; overflow: hidden; background: #ddcbb2;
 }
-/* The eye sits on the side facing the other fish. */
-.fish-body .eye { position: absolute; top: 28%; width: 12px; height: 12px; border-radius: 50%; background: #1d2a30; }
-.fish.left .eye { right: 14%; }
-.fish.right .eye { left: 14%; }
-.fish.active .fish-body { border-color: #1f6f8b; background: #eaf5f8; box-shadow: 0 0 0 4px #f6c453; }
-.fish.active .fish-name { color: #1f6f8b; }
+.stage-bg { object-fit: cover; object-position: center 58%; z-index: 0; }
+.fish { position: relative; z-index: 1; flex: 0 1 44%; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.fish-name {
+  font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #fff; text-shadow: 0 0 3px #1d2a30, 0 1px 2px #1d2a30, 0 0 6px rgba(0,0,0,.4);
+}
+.fish-sprite { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; transition: transform .2s ease; }
+.fish-sprite.flip { transform: scaleX(-1); }
+.fish .fish-sprite { max-width: 190px; filter: drop-shadow(0 4px 2px rgba(0,0,0,.18)); }
+.fish.active .fish-sprite { filter: drop-shadow(0 0 6px #f6c453) drop-shadow(0 0 2px #f6c453); }
+.fish.active .fish-sprite:not(.flip) { transform: translateY(-6px); }
+.fish.active .fish-sprite.flip { transform: scaleX(-1) translateY(-6px); }
+.fish.active .fish-name { color: #f6c453; }
 .dialogue {
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; min-height: 150px;
   text-align: left; padding: 16px; border: 3px solid #1d2a30; border-radius: 14px; background: #fff; color: #1d2a30;
@@ -75,3 +80,107 @@ a.button.secondary { color: #1f6f8b; }
 .meet-actions > * { min-height: 48px; min-width: 120px; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
 .dev-list li { flex-wrap: wrap; align-items: center; }
 .tag-url code { word-break: break-all; }
+
+/* ── /world: the island ─────────────────────────────────────────────────── */
+.world-page {
+  min-height: 100dvh; display: flex; flex-direction: column; align-items: center; overflow: hidden;
+  background: linear-gradient(var(--sky) 0 50%, var(--sea) 50% 100%);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.world-backdrop { position: fixed !important; object-fit: cover; filter: blur(18px) saturate(1.1); transform: scale(1.15); z-index: 0; pointer-events: none; }
+.world-header, .world, .world-hint { position: relative; z-index: 1; }
+/* Center the island + hint in the space under the header (tall phones). */
+.world-row { margin-top: auto; position: relative; z-index: 1; width: 100%; display: flex; justify-content: center; }
+/* Tiles are exactly the island's size and centered on it, so the seams line up with its edges. */
+.world-strip {
+  position: absolute; inset: 0; pointer-events: none;
+  background-repeat: repeat-x; background-size: auto 100%; background-position: center;
+}
+.world-hint { margin-bottom: auto !important; }
+.world-header {
+  width: min(100%, 900px); display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 10px 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
+.world-title { font-weight: 700; font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-header a { color: #fff; font-weight: 600; white-space: nowrap; }
+/* Square art: fit inside the viewport (minus header + hint), never stretched. */
+.world {
+  position: relative; width: min(100%, calc(100dvh - 96px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 900px);
+  aspect-ratio: 1 / 1; overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+}
+.world-bg { object-fit: contain; pointer-events: none; }
+.world-hint { margin: 6px 16px 10px; padding: 3px 12px; border-radius: 999px; background: rgba(29,42,48,.45); color: #fff; font-size: .9rem; text-align: center; }
+.world-empty {
+  position: absolute; left: 50%; top: 26%; transform: translateX(-50%); width: min(80%, 320px); z-index: 3000;
+  background: rgba(255,255,255,.92); border-radius: 14px; padding: 12px 14px; text-align: center; font-weight: 600;
+}
+
+.wfish {
+  position: absolute; left: 0; top: 0; padding: 0; margin: 0; border: 0; border-radius: 0; background: none; color: inherit;
+  cursor: pointer; transform-origin: 50% 100%; will-change: transform; -webkit-tap-highlight-color: transparent;
+}
+.wfish:not([data-ready]) { visibility: hidden; }
+/* Invisible hit area so even small fish are ≥ 44px to tap. */
+.wfish::before { content: ""; position: absolute; inset: -12px -10px -4px; }
+.wfish:focus-visible { outline: 3px solid #f6c453; outline-offset: 2px; }
+.wfish-body { display: block; transition: transform .15s ease; }
+.wfish[data-facing="right"] .wfish-body { transform: scaleX(-1); }
+.wfish-body .fish-sprite { filter: drop-shadow(0 3px 2px rgba(0,0,0,.2)); }
+.wfish.walking .wfish-body .fish-sprite { animation: bob .45s ease-in-out infinite alternate; }
+@keyframes bob { from { transform: translateY(0); } to { transform: translateY(-5%); } }
+.wfish.stranger .wfish-body { opacity: .6; }
+.wfish-name {
+  position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 2px;
+  font-size: clamp(12px, 1.5vw, 14px); font-weight: 700; line-height: 1.2; white-space: nowrap; color: #fff;
+  text-shadow: 0 0 3px #1d2a30, 0 1px 2px #1d2a30, 0 0 1px #1d2a30;
+}
+.wfish.me .wfish-name { background: #f6c453; color: #1d2a30; text-shadow: none; padding: 1px 8px; border-radius: 999px; }
+.wfish-bubble {
+  position: absolute; left: 50%; bottom: calc(100% + 1.6em); transform: translateX(-50%);
+  background: #fff; color: #1d2a30; border: 2px solid #1d2a30; border-radius: 12px; padding: 3px 9px;
+  font-size: clamp(12px, 1.6vw, 15px); font-weight: 600; white-space: nowrap; animation: pop .18s ease-out;
+}
+.wfish-bubble::after {
+  content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: #1d2a30;
+}
+.wfish-bubble[hidden] { display: none; }
+@keyframes pop { from { transform: translateX(-50%) scale(.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .wfish.walking .wfish-body .fish-sprite, .wfish-bubble { animation: none; }
+}
+
+/* Popup: bottom sheet on phones, centered card on desktop. */
+.sheet-backdrop { position: fixed; inset: 0; z-index: 5000; background: rgba(29,42,48,.35); display: flex; align-items: flex-end; justify-content: center; }
+.sheet {
+  position: relative; width: 100%; max-height: 85dvh; overflow-y: auto; background: #fdf8f0;
+  border-radius: 20px 20px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); animation: slide-up .2s ease-out;
+}
+@keyframes slide-up { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (min-width: 640px) {
+  .sheet-backdrop { align-items: center; }
+  .sheet { width: 420px; border-radius: 20px; padding-bottom: 20px; }
+}
+.sheet h2 { margin-right: 40px; }
+.sheet-close {
+  position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: #1d2a30; font-size: 1.2rem; z-index: 2;
+}
+.fish-card-head { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.fish-card-sprite { flex: 0 0 72px; }
+.fish-card-sprite.stranger { opacity: .6; }
+.fish-card .level { font-size: 1rem; }
+.fish-card .hint { background: #eaf5f8; border-radius: 10px; padding: 8px 12px; }
+.fish-card h3 { font-size: 1rem; margin: 16px 0 6px; }
+.swim-btn { width: 100%; min-height: 48px; font-weight: 700; margin-top: 4px; }
+ul.history { list-style: none; padding: 0; margin: 0; }
+ul.history button {
+  width: 100%; min-height: 48px; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  background: #fff; color: #1d2a30; border: 1px solid #e6dfd3; margin-bottom: 6px; text-align: left;
+}
+ul.history button:disabled { opacity: .6; }
+
+/* Replay: the same cutscene player, full-screen over the island. */
+.replay-backdrop { position: fixed; inset: 0; z-index: 6000; background: #fdf8f0; overflow-y: auto; }
+.replay { position: relative; }
+.replay > .sheet-close { top: calc(4px + env(safe-area-inset-top)); right: calc(4px + env(safe-area-inset-right)); background: rgba(255,255,255,.85); }

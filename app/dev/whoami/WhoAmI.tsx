@@ -20,6 +20,12 @@ export default function WhoAmI({ users }: { users: User[] }) {
       <h1>Who am I? (dev)</h1>
       <p className="muted">
         Current fishId: <code>{me ?? "(none)"}</code>
+        {me && (
+          <>
+            {" "}
+            · <Link href="/world">Go to my island →</Link>
+          </>
+        )}
       </p>
       {users.length === 0 && <p>No profiles yet. Run onboarding or <code>npm run seed:fish</code>.</p>}
       <ul className="items dev-list">

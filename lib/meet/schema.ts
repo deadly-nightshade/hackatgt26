@@ -43,12 +43,28 @@ export const AnalysisSchema = z.object({
 });
 export type Analysis = z.infer<typeof AnalysisSchema>;
 
+/** A tiny world-map speech-bubble exchange ("a" = pair's userIds[0]). Each side ≤ 4 words. */
+export const BumpLineSchema = z.object({
+  a: z.string().describe("fish a's bubble, at most 4 words"),
+  b: z.string().describe("fish b's reply bubble, at most 4 words"),
+});
+export type BumpLine = z.infer<typeof BumpLineSchema>;
+
 /** AI call #2 output. Array bounds are lenient here; extra lines are trimmed in code. */
 export const DialogueSchema = z.object({
   friendsLines: z.array(DialogueLineSchema).min(2).max(10),
   clammedUpLines: z.array(DialogueLineSchema).min(2).max(10),
+  bumpLines: z.array(BumpLineSchema).max(12).describe("5-8 tiny exchanges for when they bump into each other on the island"),
 });
-export type Dialogue = z.infer<typeof DialogueSchema>;
+/** Parsing is lenient on bumpLines: bad or missing ones fall back to templates instead of costing a retry. */
+export const DialogueParseSchema = DialogueSchema.extend({
+  bumpLines: z.array(z.object({ a: z.string(), b: z.string() })).catch([]),
+});
+export type Dialogue = {
+  friendsLines: DialogueLine[];
+  clammedUpLines: DialogueLine[];
+  bumpLines: BumpLine[];
+};
 
 /** Stretch: hangout scene batch (one AI call → 3 scenes). */
 export const SceneBatchSchema = z.object({
@@ -76,6 +92,8 @@ export type Pair = {
   analysis?: Analysis;
   similarity?: number;
   dialogue?: { friendsLines: DialogueLine[]; clammedUpLines: DialogueLine[] };
+  /** World-map bump bubbles from the dialogue call. Absent on older pairs (templates fill in). */
+  bumpLines?: BumpLine[];
   status: PairStatus;
   friendsSince?: Date;
   promptVersion?: string;
@@ -94,6 +112,13 @@ export type Pair = {
 
 export type MeetOutcome = "friends" | "clammed_up" | "already_friends" | "hangout" | "cooldown";
 
+/** What a history entry was (the world's cutscene history). */
+export type AttemptKind = "first_meet" | "hangout" | "clammed_up" | "cooldown" | "already_friends";
+
+export function kindOf(outcome: MeetOutcome): AttemptKind {
+  return outcome === "friends" ? "first_meet" : outcome;
+}
+
 export type MeetAttempt = {
   _id: string;
   pairKey: string;
@@ -102,6 +127,20 @@ export type MeetAttempt = {
   pFail: number | null;
   roll: number | null;
   createdAt: Date;
+  // Full record of what played (optional: attempts logged before this was added lack them).
+  targetId?: string;
+  initiatorName?: string;
+  targetName?: string;
+  attemptNumber?: number;
+  level?: number;
+  leveledUp?: boolean;
+  usedFallback?: boolean;
+  modelCalls?: number;
+  kind?: AttemptKind;
+  levelAfter?: number;
+  levelNameAfter?: string;
+  /** The exact cutscene shown, speaker resolved to a display name (null = narrator). */
+  script?: (DialogueLine & { speakerName: string | null })[];
 };
 
 export type MeetResponse = {

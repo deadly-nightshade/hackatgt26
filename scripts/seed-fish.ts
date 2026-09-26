@@ -3,10 +3,18 @@
  * profile. Idempotent: existing seeds are skipped. `--clear` removes the seeds
  * and every pair/attempt involving them.
  *
+ * `--for <userId>` also builds that user a sample /world (PHASE_3): meets and
+ * hangouts run through the real pipeline with the MOCK AI (zero model calls),
+ * backdated a few days, so pairs, levels, bump lines and replayable scripts exist.
+ *
  *   npm run seed:fish
+ *   npm run seed:fish -- --for <yourId>
  *   npm run seed:fish -- --clear
  */
 import "./loadEnv";
+import { MockMeetAI } from "@/lib/meet/ai";
+import { runMeet, type MeetDeps } from "@/lib/meet/pipeline";
+import { pairKeyOf } from "@/lib/meet/schema";
 import { INTEREST_CATEGORIES, ProfileSchema, SCHEMA_VERSION, type Profile } from "@/lib/profile/schema";
 import { getPairRepository, getProfileRepository } from "@/lib/storage";
 import { closeMongo } from "@/lib/storage/mongoRepo";
@@ -149,7 +157,75 @@ async function main() {
     }
     log(`seeded ${s.id}  ${s.displayName} — ${s.scenario}`);
   }
-  log(`\nTry: npm run meet:pair -- <yourId> ${ids[0]}   or open /dev/whoami`);
+  const forId = process.argv[process.argv.indexOf("--for") + 1];
+  if (process.argv.includes("--for") && forId) await seedWorld(forId);
+  else log(`\nTry: npm run seed:fish -- --for <yourId>   (builds you a /world), or open /dev/whoami`);
+}
+
+type Tap = { from: string; to: string; force?: "friends" | "clammed_up"; hangout?: boolean };
+
+/**
+ * A mix for /world: levels 1–4, one stranger (two clammed-up tries), and one
+ * pair between two residents (friend-to-friend bump lines).
+ */
+function worldPlan(me: string): Tap[] {
+  const [mochi, pip, rex, bruno, twin] = SEEDS.map((s) => s.id);
+  const hangouts = (from: string, to: string, n: number): Tap[] => Array.from({ length: n }, () => ({ from, to, hangout: true }));
+  return [
+    { from: me, to: twin, force: "friends" },
+    ...hangouts(twin, me, 6), // → Best Fishes
+    { from: me, to: mochi, force: "friends" },
+    ...hangouts(me, mochi, 3), // → Close Friends
+    { from: pip, to: me, force: "friends" },
+    ...hangouts(me, pip, 1), // → Good Friends
+    { from: me, to: bruno, force: "clammed_up" },
+    { from: me, to: bruno, force: "friends" }, // Friends, after one clam-up
+    { from: me, to: rex, force: "clammed_up" },
+    { from: rex, to: me, force: "clammed_up" }, // stranger ("Just met")
+    { from: mochi, to: pip, force: "friends" }, // resident ↔ resident
+  ];
+}
+
+async function seedWorld(me: string) {
+  const profiles = getProfileRepository();
+  const pairs = getPairRepository();
+  if (!(await profiles.get(me))) throw new Error(`No profile with id ${me} (run onboarding first, or pick one from npm run list:fish)`);
+
+  // Pairs that already exist are left alone (idempotent re-runs, real meets untouched).
+  const plan = worldPlan(me);
+  const skip = new Set<string>();
+  for (const { from, to } of plan) {
+    const key = pairKeyOf(from, to);
+    if (!skip.has(key) && (await pairs.getPair(key))) skip.add(key);
+  }
+
+  // Backdate: start 5 days ago, a few hours between taps.
+  let clock = Date.now() - 5 * 24 * 3600_000;
+  const log = console.log;
+  let ran = 0;
+  for (const tap of plan) {
+    if (skip.has(pairKeyOf(tap.from, tap.to))) continue;
+    clock += 3 * 3600_000 + Math.floor(Math.random() * 3600_000);
+    const at = clock;
+    const deps: MeetDeps = {
+      profiles,
+      pairs,
+      ai: new MockMeetAI(),
+      now: () => new Date(at),
+      forcedOutcome: tap.force ?? null,
+      hangoutsEnabled: true,
+      cooldownMs: 0,
+    };
+    console.log = () => {}; // the pipeline logs every tap
+    try {
+      await runMeet({ initiatorId: tap.from, targetId: tap.to, ignoreCooldown: tap.hangout }, deps);
+    } finally {
+      console.log = log;
+    }
+    ran++;
+  }
+  log(`\nWorld for ${me}: ${ran} tap(s) simulated with the mock AI${skip.size ? `, ${skip.size} existing pair(s) left as they were` : ""}.`);
+  log(`Open /dev/whoami → pick that fish → /world`);
 }
 
 main()

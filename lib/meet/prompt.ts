@@ -1,6 +1,7 @@
 import type { Analysis } from "@/lib/meet/schema";
 import { MIDDLE_LINES, SCENE_LINES, SCENES_PER_BATCH } from "@/lib/meet/config";
 import { PUN_BANK } from "@/lib/meet/templates";
+import { BUMP_LINES, BUMP_MAX_WORDS } from "@/lib/world/bumps";
 import type { Profile } from "@/lib/profile/schema";
 
 /**
@@ -77,6 +78,8 @@ Write TWO variants:
 - friendsLines (${MIDDLE_LINES.min}-${MIDDLE_LINES.max} lines): they chat happily about their REAL overlaps (use the connections given, especially the spotlight and any bridge).
 - clammedUpLines (${MIDDLE_LINES.min}-${MIDDLE_LINES.max} lines): shy and awkward, a few near-misses, but still touching on the spotlight connection, ending on a hopeful note.
 Use the fish's names naturally in the text where it helps.
+
+Also write bumpLines (${BUMP_LINES.min}-${BUMP_LINES.max} items): tiny speech-bubble exchanges for when these two fish bump into each other while wandering the island. a = fish a's bubble, b = fish b's reply. Each side AT MOST ${BUMP_MAX_WORDS} WORDS, lowercase-casual, about their real overlaps, one emoji allowed. Examples: { "a": "honkai star rail?", "b": "gaming!!" }, { "a": "skewers later?", "b": "always 🍢" }.
 
 ${DIALOGUE_STYLE}
 

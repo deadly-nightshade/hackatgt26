@@ -8,9 +8,14 @@ export interface PairRepository {
   /** Insert or replace the whole pair document. */
   savePair(pair: Pair): Promise<void>;
   listPairsForUser(userId: string): Promise<Pair[]>;
+  /** Pairs whose BOTH fish are in `userIds` (the world's friend-to-friend bumps). */
+  listPairsAmong(userIds: string[]): Promise<Pair[]>;
   logAttempt(attempt: MeetAttempt): Promise<void>;
   /** Oldest first. */
   listAttempts(pairKey: string): Promise<MeetAttempt[]>;
+  /** Oldest first, across several pairs. */
+  listAttemptsForPairs(pairKeys: string[]): Promise<MeetAttempt[]>;
+  getAttempt(attemptId: string): Promise<MeetAttempt | null>;
   /** Removes pairs and attempts involving any of these users (seed cleanup). */
   deleteForUsers(userIds: string[]): Promise<number>;
   /** Removes one pair and its attempts (CLI --reset). */
@@ -48,10 +53,29 @@ export class FilePairRepository implements PairRepository {
   }
 
   async listPairsForUser(userId: string): Promise<Pair[]> {
+    return (await this.allPairs()).filter((p) => p.userIds.includes(userId));
+  }
+
+  async listPairsAmong(userIds: string[]): Promise<Pair[]> {
+    const set = new Set(userIds);
+    return (await this.allPairs()).filter((p) => set.has(p.userIds[0]) && set.has(p.userIds[1]));
+  }
+
+  private async allPairs(): Promise<Pair[]> {
     const dir = path.join(this.root, "pairs");
     const files = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith(".json"));
-    const pairs = await Promise.all(files.map((f) => this.getPair(path.basename(f, ".json"))));
-    return pairs.filter((p): p is Pair => !!p && p.userIds.includes(userId));
+    return (await Promise.all(files.map((f) => this.getPair(path.basename(f, ".json"))))).filter((p): p is Pair => !!p);
+  }
+
+  async listAttemptsForPairs(pairKeys: string[]): Promise<MeetAttempt[]> {
+    const all = (await Promise.all(pairKeys.map((k) => this.listAttempts(k)))).flat();
+    return all.sort((x, y) => x.createdAt.getTime() - y.createdAt.getTime());
+  }
+
+  async getAttempt(attemptId: string): Promise<MeetAttempt | null> {
+    const pairs = await this.allPairs();
+    for (const a of await this.listAttemptsForPairs(pairs.map((p) => p.pairKey))) if (a._id === attemptId) return a;
+    return null;
   }
 
   async logAttempt(attempt: MeetAttempt): Promise<void> {
