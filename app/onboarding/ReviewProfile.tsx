@@ -13,15 +13,17 @@ const TRAIT_LABELS: Record<keyof Profile["traits"], string> = {
 
 const pretty = (s: string) => s.replace(/_/g, " ");
 
-/** Consent step: user can delete interests / wantsToTry and edit the summary. */
+/** Consent step: user can delete interests / wantsToTry and edit the summary. `readOnly` = plain view (/me). */
 export default function ReviewProfile({
   profile,
   onConfirm,
-  saving,
+  saving = false,
+  readOnly = false,
 }: {
   profile: Profile;
-  onConfirm: (p: Profile) => void;
-  saving: boolean;
+  onConfirm?: (p: Profile) => void;
+  saving?: boolean;
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState<Profile>(profile);
   const set = (patch: Partial<Profile>) => setDraft((d) => ({ ...d, ...patch }));
@@ -30,7 +32,11 @@ export default function ReviewProfile({
     <>
       <section className="card">
         <h2>About you</h2>
-        <textarea value={draft.summary} onChange={(e) => set({ summary: e.target.value })} aria-label="Summary" />
+        {readOnly ? (
+          <p>{draft.summary}</p>
+        ) : (
+          <textarea value={draft.summary} onChange={(e) => set({ summary: e.target.value })} aria-label="Summary" />
+        )}
       </section>
 
       <section className="card">
@@ -44,9 +50,11 @@ export default function ReviewProfile({
                 <span className="chip">{pretty(i.category)}</span>
                 <div className="muted">“{i.evidence}”</div>
               </div>
-              <button className="danger" onClick={() => set({ interests: draft.interests.filter((x) => x.tag !== i.tag) })}>
-                Remove
-              </button>
+              {!readOnly && (
+                <button className="danger" onClick={() => set({ interests: draft.interests.filter((x) => x.tag !== i.tag) })}>
+                  Remove
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -62,12 +70,14 @@ export default function ReviewProfile({
                   <strong>{w.name}</strong>
                   <div className="muted">“{w.evidence}”</div>
                 </div>
-                <button
-                  className="danger"
-                  onClick={() => set({ wantsToTry: draft.wantsToTry.filter((x) => x.tag !== w.tag) })}
-                >
-                  Remove
-                </button>
+                {!readOnly && (
+                  <button
+                    className="danger"
+                    onClick={() => set({ wantsToTry: draft.wantsToTry.filter((x) => x.tag !== w.tag) })}
+                  >
+                    Remove
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -121,11 +131,13 @@ export default function ReviewProfile({
         </ul>
       </section>
 
-      <div className="row">
-        <button onClick={() => onConfirm(draft)} disabled={saving || !draft.summary.trim()}>
-          {saving ? "Saving…" : "Looks like me → Confirm"}
-        </button>
-      </div>
+      {!readOnly && onConfirm && (
+        <div className="row">
+          <button onClick={() => onConfirm(draft)} disabled={saving || !draft.summary.trim()}>
+            {saving ? "Saving…" : "Looks like me → Confirm"}
+          </button>
+        </div>
+      )}
     </>
   );
 }

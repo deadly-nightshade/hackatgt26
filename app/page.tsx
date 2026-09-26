@@ -25,7 +25,7 @@ export default function Home() {
       <h1>Welcome back, {name} 🐟</h1>
       <p>Tap a friend&apos;s NFC tag with your phone to meet them at the market.</p>
       <p>
-        <Link href="/onboarding">Redo onboarding</Link>
+        <Link href="/me">View my profile</Link> · <Link href="/onboarding">Redo onboarding</Link>
       </p>
     </main>
   );
