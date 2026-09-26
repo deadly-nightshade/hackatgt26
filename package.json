@@ -1,0 +1,39 @@
+{
+  "name": "hackatgt26",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "extract:fixtures": "tsx scripts/extract-fixtures.ts",
+    "audio:questions": "tsx scripts/generate-question-audio.ts",
+    "import:profiles": "tsx scripts/import-profiles.ts"
+  },
+  "dependencies": {
+    "@elevenlabs/react": "^1.15.2",
+    "ffmpeg-static": "^5.3.0",
+    "mongodb": "^7.6.0",
+    "next": "^15.5.26",
+    "openai": "^7.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@next/env": "^15.5.26",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2"
+  },
+  "allowScripts": {
+    "ffmpeg-static@5.3.0": true,
+    "esbuild@0.28.2": true
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "description": "(b) Low-effort, thin answers",
+  "displayName": "Sam",
+  "answers": [
+    {
+      "questionId": "free_day",
+      "transcript": "idk like night in? night out, sleeping time?"
+    },
+    {
+      "questionId": "feed",
+      "transcript": "memes mostly. random stuff"
+    },
+    {
+      "questionId": "want_to_try",
+      "transcript": "nothing really"
+    }
+  ],
+  "mustNotContain": []
+}

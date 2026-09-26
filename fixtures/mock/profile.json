@@ -1,0 +1,37 @@
+{
+  "summary": "You're a curious, easygoing explorer who's happiest halfway up a climbing wall or elbow-deep in a thrift bin — and you always bring a friend along for the ride.",
+  "interests": [
+    { "name": "bouldering", "category": "fitness", "tag": "bouldering", "evidence": "go bouldering at the gym with a friend or two", "confidence": 0.9 },
+    { "name": "thrifting", "category": "fashion_beauty", "tag": "thrifting", "evidence": "I'd hit a couple thrift stores", "confidence": 0.8 },
+    { "name": "cooking new recipes", "category": "food_drink", "tag": "cooking", "evidence": "cook something new, maybe a Thai curry", "confidence": 0.75 },
+    { "name": "film camera restoration", "category": "arts_crafts", "tag": "film-cameras", "evidence": "people restoring old film cameras", "confidence": 0.6 },
+    { "name": "pour-over coffee", "category": "food_drink", "tag": "pour-over-coffee", "evidence": "make a big pot of pour-over coffee", "confidence": 0.6 }
+  ],
+  "wantsToTry": [
+    { "name": "wheel-throwing pottery", "tag": "pottery", "evidence": "I've always wanted to try pottery, like a wheel-throwing class" }
+  ],
+  "socialStyle": {
+    "energy": "balanced",
+    "groupSize": "small_group",
+    "planning": "spontaneous",
+    "evidence": "bouldering with a friend or two, then a movie on the couch"
+  },
+  "traits": {
+    "openness": { "score": 4, "confidence": 0.5, "evidence": "cook something new, maybe a Thai curry" },
+    "conscientiousness": { "score": 3, "confidence": 0.3, "evidence": "" },
+    "extraversion": { "score": 3.5, "confidence": 0.5, "evidence": "with a friend or two" },
+    "agreeableness": { "score": 3.5, "confidence": 0.3, "evidence": "with a friend or two" },
+    "emotionalStability": { "score": 3, "confidence": 0.2, "evidence": "" }
+  },
+  "vibeType": { "mbti": "ENFP", "label": "The Tide-Chasing Tinkerer", "confidence": 0.35 },
+  "conversationStarters": [
+    "What's the hardest bouldering problem you've sent lately?",
+    "Best thrift find of all time — go.",
+    "Want to split a pottery class sometime?"
+  ],
+  "residentFlavor": {
+    "marketStall": "a driftwood stall swapping vintage film cameras for fresh pour-over",
+    "catchphrase": "Every roll tells a story — want a sip while you pick one?"
+  },
+  "lowSignalAreas": ["music taste", "weeknight routine", "how they handle stress"]
+}

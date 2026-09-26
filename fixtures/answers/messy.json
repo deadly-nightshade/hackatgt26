@@ -1,0 +1,19 @@
+{
+  "description": "(c) Messy transcript with filler and self-corrections",
+  "displayName": "Dev",
+  "answers": [
+    {
+      "questionId": "free_day",
+      "transcript": "um so like okay I'd wake up, wait no, I'd sleep in, like super late, and then um go get like a bacon egg and cheese from the bodega and then uh I'd play, like, Valorant for a few hours, well actually no I've been more into Baldur's Gate lately, so that, and then like at night maybe go to a, um, open mic comedy thing? like I don't perform, I just, I just watch, it's fun, and then like crash I guess"
+    },
+    {
+      "questionId": "feed",
+      "transcript": "uh YouTube is like, it's all video essays, like the three hour ones about why some game flopped, and uh, like, standup clips, and um, sneaker stuff? like restocks, I don't buy them all I just like, look. and at like 2am it's like, uh, conspiracy iceberg videos lol"
+    },
+    {
+      "questionId": "want_to_try",
+      "transcript": "um, like, doing an open mic myself? like actually doing standup, but like I'd need someone to go with or I'll chicken out. or, like, a DnD campaign in person, not online"
+    }
+  ],
+  "mustNotContain": []
+}

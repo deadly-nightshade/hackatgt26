@@ -1,0 +1,19 @@
+{
+  "description": "(a) Rich, detailed answers",
+  "displayName": "Maya",
+  "answers": [
+    {
+      "questionId": "free_day",
+      "transcript": "Okay so perfect Saturday. I'd wake up around nine without an alarm, make a pour-over with the fancy Ethiopian beans I've been hoarding, and read on the balcony for an hour — right now I'm deep into a Murakami phase. Then I'd meet two friends at the bouldering gym, we usually project V4s and yell encouragement at each other. Lunch would be ramen at this tiny place downtown. Afternoon I'd wander the farmers market and maybe thrift a bit, I'm always hunting for vintage denim jackets. Evening, honestly I'd host a small dinner, like four or five people, cook something ambitious like homemade dumplings, and we'd end with a board game, Wingspan or Codenames. Crash by midnight, happy and tired."
+    },
+    {
+      "questionId": "feed",
+      "transcript": "My TikTok is embarrassingly specific. It's bouldering beta videos, a lot of Magnus Midtbø, then dumpling-folding tutorials, and this whole niche of people restoring old film cameras. At 2am it becomes sad cat videos and people ranking every Studio Ghibli movie. Also a weird amount of urban sketching timelapses, I keep saying I'll start."
+    },
+    {
+      "questionId": "want_to_try",
+      "transcript": "Pottery! Like a proper wheel-throwing class. And also I really want to try night kayaking, there's a bioluminescence tour a couple hours away but none of my friends are into early mornings or late nights on the water."
+    }
+  ],
+  "mustNotContain": []
+}

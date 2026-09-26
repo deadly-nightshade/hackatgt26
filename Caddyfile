@@ -1,0 +1,5 @@
+# Automatic HTTPS (needed for the mic on mobile). Set DOMAIN in the shell/.env for compose.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:3000
+}

@@ -1,0 +1,39 @@
+/* Barebones on purpose — theming is out of scope. */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #fdf8f0;
+  color: #1d2a30;
+  line-height: 1.5;
+}
+main { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 1.5rem; margin: 0 0 16px; }
+h2 { font-size: 1.15rem; margin: 0 0 8px; }
+button {
+  font: inherit; padding: 10px 16px; border-radius: 10px; border: 1px solid #1f6f8b;
+  background: #1f6f8b; color: #fff; cursor: pointer;
+}
+button.secondary { background: transparent; color: #1f6f8b; }
+button.danger { background: transparent; color: #b3261e; border-color: #b3261e; padding: 2px 8px; font-size: .85rem; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+input, textarea {
+  font: inherit; width: 100%; padding: 10px; border: 1px solid #c9c2b6; border-radius: 10px; background: #fff;
+}
+textarea { min-height: 110px; resize: vertical; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+.card { background: #fff; border: 1px solid #e6dfd3; border-radius: 14px; padding: 16px; margin: 12px 0; }
+.muted { color: #5f6b70; font-size: .9rem; }
+.error { color: #b3261e; font-size: .9rem; }
+.prompt { font-size: 1.1rem; }
+.followup { border-left: 4px solid #f6c453; padding-left: 12px; margin: 16px 0; }
+.chip { display: inline-block; font-size: .75rem; background: #eaf5f8; color: #1f6f8b; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+ul.items { list-style: none; padding: 0; margin: 0; }
+ul.items li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid #f0ebe2; }
+ul.items li:first-child { border-top: 0; }
+.rec { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #b3261e; margin-right: 6px; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.meter-wrap { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; }
+.meter { flex: 0 0 160px; height: 8px; background: #e6dfd3; border-radius: 999px; overflow: hidden; }
+.meter-fill { height: 100%; background: #2e9e6a; transition: width 60ms linear; }
+.live { min-height: 110px; padding: 10px; border: 2px solid #2e9e6a; border-radius: 10px; background: #fff; white-space: pre-wrap; margin: 4px 0 12px; }
