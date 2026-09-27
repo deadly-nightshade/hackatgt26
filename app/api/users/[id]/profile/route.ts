@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { FISH_ID_HEADER } from "@/lib/meet/identity";
 import { applyProfileEdit, formatEditError, ProfileEditError, ProfileEditSchema } from "@/lib/profile/edit";
 import { withoutTraits } from "@/lib/profile/schema";
-import { getProfileRepository } from "@/lib/storage";
+import { getPairRepository, getProfileRepository } from "@/lib/storage";
+import { getResidentsFor } from "@/lib/world/server";
 import { HttpError, readJson, withRoute } from "@/lib/util/log";
 
 export const runtime = "nodejs";
@@ -10,9 +11,19 @@ export const runtime = "nodejs";
 /** GET → { id, profile (never the personality traits), appearance } for the owner's /me page (no auth: knowing the id is the key, like the meet flow). */
 export const GET = withRoute("GET /api/users/:id/profile", async (_req, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params;
-  const stored = await getProfileRepository().get(id);
+  const profiles = getProfileRepository();
+  const stored = await profiles.get(id);
   if (!stored) throw new HttpError(404, "No fish with that id");
-  return NextResponse.json({ id: stored.id, profile: withoutTraits(stored.profile), appearance: stored.appearance, onboardingMode: stored.onboardingMode });
+  const { residents } = await getResidentsFor(id, { profiles, pairs: getPairRepository() });
+  return NextResponse.json({
+    id: stored.id,
+    profile: withoutTraits(stored.profile),
+    appearance: stored.appearance,
+    onboardingMode: stored.onboardingMode,
+    discoverable: stored.discoverable,
+    // Own profile page only ("🐟 N fish friends · M just met").
+    counts: { friends: residents.filter((r) => r.status === "friends").length, strangers: residents.filter((r) => r.status !== "friends").length },
+  });
 });
 
 /**

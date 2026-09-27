@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { CutscenePlayer } from "@/app/_components/Cutscene";
 import { FishArtPreloader, FishSprite } from "@/app/_components/FishSprite";
 import { LEVELS } from "@/lib/meet/config";
@@ -14,10 +14,15 @@ import { SCENE_BASE, SPRITES } from "@/lib/world/scene";
 import type { HistoryItem, ReplayResponse, Resident, WorldResponse } from "@/lib/world/types";
 import { useWorldSim } from "@/lib/world/useWorldSim";
 import { DebugOverlay, DebugPanel } from "./Debug";
+import { FindFish } from "./FindFish";
+import { Sheet } from "./Sheet";
 import { SceneSprite } from "./SceneSprite";
 
 /** Every world fish sprite uses this hint, so the preloader fetches the same image candidates. */
 const WORLD_FISH_SIZES = "(max-width: 600px) 80px, 130px";
+
+/** Ocean at least this tall → stack the "Find fish" button above the hint. */
+const TALL_SEA_PX = 120;
 
 type Load = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; world: WorldResponse };
 
@@ -65,6 +70,16 @@ function Island({ world }: { world: WorldResponse }) {
   // The dashed walk/zone overlay: on for plain ?debug=1, off when recording a demo.
   const [geometry, setGeometry] = useState(!flags.demo);
   const [replayId, setReplayId] = useState<string | null>(null);
+  // Decide the "Find fish" placement by the ocean block's actual height (not viewport width).
+  const seaRef = useRef<HTMLDivElement | null>(null);
+  const [tallSea, setTallSea] = useState(false);
+  useEffect(() => {
+    const el = seaRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setTallSea(entry.contentRect.height >= TALL_SEA_PX));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Esc closes the topmost layer.
   useEffect(() => {
@@ -131,9 +146,13 @@ function Island({ world }: { world: WorldResponse }) {
           )}
         </div>
       </div>
-      <div className="world-sea" />
+      <div className="world-sea" ref={seaRef} />
 
-      <p className="world-hint">Tap a fish to see your story together</p>
+      {/* Tall ocean (phones): "Find fish" sits above the hint; short ocean (laptops): beside it. */}
+      <div className={`world-bottom ${tallSea ? "stacked" : "inline"}`}>
+        <FindFish meId={me.id} />
+        <p className="world-hint">Tap a fish to see your story together</p>
+      </div>
       {flags.debug && <DebugPanel sim={sim} geometry={geometry} onGeometry={setGeometry} />}
 
       {card === "me" && (
@@ -172,19 +191,6 @@ function Island({ world }: { world: WorldResponse }) {
 }
 
 // ── popup card ──────────────────────────────────────────────────────────────
-
-function Sheet({ onClose, children, className = "" }: { onClose: () => void; children: ReactNode; className?: string }) {
-  return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className={`sheet ${className}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">
-          ✕
-        </button>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 const KIND_LABEL: Record<AttemptKind, string> = {
   first_meet: "✨ First meet",

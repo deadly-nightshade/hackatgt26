@@ -18,6 +18,8 @@ export type ProfileRecord = {
   appearance?: Appearance;
   /** How they onboarded (analytics/debug only). */
   onboardingMode?: OnboardingMode;
+  /** Opted in to being suggested to other fish ("Find fish"). Default false. */
+  discoverable?: boolean;
 };
 
 export type OnboardingMode = "quick" | "full";
@@ -40,11 +42,13 @@ export type StoredProfile = {
   contentUpdatedAt: Date;
   isSeed: boolean;
   onboardingMode: OnboardingMode | null;
+  /** Opted in to recommendations (missing on older docs → false). */
+  discoverable: boolean;
   /** Always complete: missing/partial/unknown slots read as "none" (getAppearance). */
   appearance: Appearance;
 };
 
-export type ProfileListItem = { id: string; displayName: string; isSeed: boolean; updatedAt: Date };
+export type ProfileListItem = { id: string; displayName: string; isSeed: boolean; updatedAt: Date; discoverable: boolean };
 
 export interface ProfileRepository {
   save(record: ProfileRecord): Promise<{ id: string }>;
@@ -60,9 +64,11 @@ export interface ProfileRepository {
    * Keeps createdAt/isSeed. False if the profile doesn't exist.
    */
   update(id: string, record: UpdateRecord, opts?: UpdateOptions): Promise<boolean>;
+  /** Consent toggle: discoverable + discoverableUpdatedAt only (never updatedAt/contentUpdatedAt). */
+  setDiscoverable(id: string, discoverable: boolean): Promise<boolean>;
 }
 
-export type UpdateRecord = Pick<ProfileRecord, "profile"> & Partial<Pick<ProfileRecord, "rawAnswers" | "appearance" | "onboardingMode">>;
+export type UpdateRecord = Pick<ProfileRecord, "profile"> & Partial<Pick<ProfileRecord, "rawAnswers" | "appearance" | "onboardingMode" | "discoverable">>;
 
 export function newProfileId(): string {
   return randomUUID();
@@ -98,6 +104,7 @@ export function toStoredProfile(doc: Record<string, unknown> & { _id: string }):
     isSeed: doc.isSeed === true,
     appearance: getAppearance(doc.appearance),
     onboardingMode: doc.onboardingMode === "quick" || doc.onboardingMode === "full" ? doc.onboardingMode : null,
+    discoverable: doc.discoverable === true,
   };
 }
 
@@ -121,6 +128,8 @@ export class ConsoleFileRepository implements ProfileRepository {
           contentUpdatedAt: now,
           ...(record.isSeed ? { isSeed: true } : {}),
           ...(record.onboardingMode ? { onboardingMode: record.onboardingMode } : {}),
+          discoverable: record.discoverable === true,
+          discoverableUpdatedAt: now,
           ...record.profile,
           appearance: getAppearance(record.appearance ?? DEFAULT_APPEARANCE),
           appearanceUpdatedAt: now,
@@ -148,7 +157,7 @@ export class ConsoleFileRepository implements ProfileRepository {
     const items = await Promise.all(files.map((f) => this.get(path.basename(f, ".json"))));
     return items
       .filter((p): p is StoredProfile => p !== null)
-      .map((p) => ({ id: p.id, displayName: p.profile.displayName, isSeed: p.isSeed, updatedAt: p.updatedAt }));
+      .map((p) => ({ id: p.id, displayName: p.profile.displayName, isSeed: p.isSeed, updatedAt: p.updatedAt, discoverable: p.discoverable }));
   }
 
   async delete(id: string): Promise<void> {
@@ -173,6 +182,8 @@ export class ConsoleFileRepository implements ProfileRepository {
           contentUpdatedAt: contentChanged ? now : (old.contentUpdatedAt ?? old.updatedAt ?? now),
           ...(old.isSeed ? { isSeed: true } : {}),
           ...((record.onboardingMode ?? old.onboardingMode) ? { onboardingMode: record.onboardingMode ?? old.onboardingMode } : {}),
+          discoverable: record.discoverable ?? old.discoverable === true,
+          discoverableUpdatedAt: record.discoverable !== undefined ? now : old.discoverableUpdatedAt ?? now,
           ...record.profile,
           appearance: getAppearance(record.appearance ?? old.appearance),
           appearanceUpdatedAt: record.appearance ? now : old.appearanceUpdatedAt ?? now,
@@ -182,6 +193,15 @@ export class ConsoleFileRepository implements ProfileRepository {
         2,
       ),
     );
+    return true;
+  }
+
+  async setDiscoverable(id: string, discoverable: boolean): Promise<boolean> {
+    if (!isValidProfileId(id)) return false;
+    const file = path.join(this.dir, `${id}.json`);
+    const doc = await readFile(file, "utf8").then(JSON.parse, () => null);
+    if (!doc) return false;
+    await writeFile(file, JSON.stringify({ ...doc, discoverable, discoverableUpdatedAt: new Date().toISOString() }, null, 2));
     return true;
   }
 

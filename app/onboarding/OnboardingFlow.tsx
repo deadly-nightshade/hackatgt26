@@ -81,6 +81,8 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
   const [savedId, setSavedId] = useState<string | null>(null);
   /** This browser already has a fish → onboarding updates it in place (same id: friendships stay). */
   const [existing, setExisting] = useState<{ id: string; displayName: string } | null>(null);
+  /** Opt-in to "Find fish" suggestions — unchecked by default, never required. */
+  const [discoverable, setDiscoverable] = useState(false);
 
   useEffect(() => {
     const id = getFishId();
@@ -90,6 +92,7 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
       .then((j) => {
         if (!j) return; // stale id → a brand-new fish
         setExisting({ id, displayName: j.profile.displayName });
+        setDiscoverable(j.discoverable === true);
         setDisplayName((n) => n || j.profile.displayName);
         // Keep their current look unless they already picked one this session.
         try {
@@ -235,6 +238,7 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
           rawAnswers: rawAnswers(),
           appearance,
           onboardingMode: quick ? "quick" : "full",
+          discoverable,
           ...(existing ? { id: existing.id } : {}),
         }),
       });
@@ -367,6 +371,9 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
       <main className="creator-page">
         <h1>Dress up your fish 🐟</h1>
         <FishCreator appearance={appearance} onChange={chooseLook} name={displayName.trim()} />
+        <label className="consent">
+          <input type="checkbox" checked={discoverable} onChange={(e) => setDiscoverable(e.target.checked)} /> 🐟 Suggest me to other fish — they'll see my name and the interests we share.
+        </label>
         <p className={`creator-status${ready ? " ready" : ""}`} aria-live="polite">
           {extraction.status === "error" ? (
             <span className="error">{extraction.message}</span>

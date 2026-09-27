@@ -9,7 +9,7 @@ import type { ProfileRepository, StoredProfile } from "@/lib/storage/profileRepo
 export class MemoryProfiles implements ProfileRepository {
   constructor(public map = new Map<string, StoredProfile>()) {}
   add(id: string, profile: Profile, updatedAt = new Date("2026-01-01")) {
-    this.map.set(id, { id, profile, createdAt: updatedAt, updatedAt, contentUpdatedAt: updatedAt, isSeed: false, appearance: DEFAULT_APPEARANCE, onboardingMode: null });
+    this.map.set(id, { id, profile, createdAt: updatedAt, updatedAt, contentUpdatedAt: updatedAt, isSeed: false, appearance: DEFAULT_APPEARANCE, onboardingMode: null, discoverable: false });
   }
   /** Tests may pass `at` to control timestamps. */
   async update(id: string, record: { profile: Profile; appearance?: Appearance }, opts: { contentChanged?: boolean; at?: Date } = {}) {
@@ -38,7 +38,13 @@ export class MemoryProfiles implements ProfileRepository {
     return this.map.get(id) ?? null;
   }
   async list() {
-    return [...this.map.values()].map((p) => ({ id: p.id, displayName: p.profile.displayName, isSeed: false, updatedAt: p.updatedAt }));
+    return [...this.map.values()].map((p) => ({ id: p.id, displayName: p.profile.displayName, isSeed: false, updatedAt: p.updatedAt, discoverable: p.discoverable }));
+  }
+  async setDiscoverable(id: string, discoverable: boolean) {
+    const p = this.map.get(id);
+    if (!p) return false;
+    this.map.set(id, { ...p, discoverable });
+    return true;
   }
   async delete(id: string) {
     this.map.delete(id);

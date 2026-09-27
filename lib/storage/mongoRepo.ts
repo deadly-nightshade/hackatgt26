@@ -24,6 +24,8 @@ export type ProfileDocument = Profile & {
   /** Pair AI cache key (missing on older docs → updatedAt). */
   contentUpdatedAt?: Date;
   onboardingMode?: "quick" | "full";
+  discoverable?: boolean;
+  discoverableUpdatedAt?: Date;
   /** Missing on profiles from before customization (read as the plain fish). */
   appearance?: Appearance;
   appearanceUpdatedAt?: Date;
@@ -86,6 +88,8 @@ export class MongoProfileRepository implements ProfileRepository {
       updatedAt: now,
       contentUpdatedAt: now,
       ...(record.onboardingMode ? { onboardingMode: record.onboardingMode } : {}),
+      discoverable: record.discoverable === true,
+      discoverableUpdatedAt: now,
       rawAnswers: record.rawAnswers,
       appearance: getAppearance(record.appearance ?? DEFAULT_APPEARANCE),
       appearanceUpdatedAt: now,
@@ -102,10 +106,10 @@ export class MongoProfileRepository implements ProfileRepository {
 
   async list(): Promise<ProfileListItem[]> {
     const docs = await (await this.collection())
-      .find({}, { projection: { displayName: 1, isSeed: 1, updatedAt: 1 } })
+      .find({}, { projection: { displayName: 1, isSeed: 1, updatedAt: 1, discoverable: 1 } })
       .sort({ createdAt: 1 })
       .toArray();
-    return docs.map((d) => ({ id: d._id, displayName: d.displayName, isSeed: d.isSeed === true, updatedAt: d.updatedAt }));
+    return docs.map((d) => ({ id: d._id, displayName: d.displayName, isSeed: d.isSeed === true, updatedAt: d.updatedAt, discoverable: d.discoverable === true }));
   }
 
   async delete(id: string): Promise<void> {
@@ -129,6 +133,8 @@ export class MongoProfileRepository implements ProfileRepository {
         updatedAt: now,
         contentUpdatedAt: contentChanged ? now : (old.contentUpdatedAt ?? old.updatedAt ?? now),
         ...(mode ? { onboardingMode: mode } : {}),
+        discoverable: record.discoverable ?? old.discoverable === true,
+        discoverableUpdatedAt: record.discoverable !== undefined ? now : old.discoverableUpdatedAt ?? now,
         rawAnswers: record.rawAnswers ?? old.rawAnswers ?? [],
         appearance: getAppearance(record.appearance ?? old.appearance),
         appearanceUpdatedAt: record.appearance ? now : old.appearanceUpdatedAt ?? now,
@@ -136,6 +142,13 @@ export class MongoProfileRepository implements ProfileRepository {
       },
     );
     return true;
+  }
+
+  async setDiscoverable(id: string, discoverable: boolean): Promise<boolean> {
+    if (!isValidProfileId(id)) return false;
+    // Consent only: never updatedAt / contentUpdatedAt (no pair AI cache reset).
+    const res = await (await this.collection()).updateOne({ _id: id }, { $set: { discoverable, discoverableUpdatedAt: new Date() } });
+    return res.matchedCount > 0;
   }
 
   async setAppearance(id: string, appearance: Appearance): Promise<boolean> {

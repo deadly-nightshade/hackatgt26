@@ -9,5 +9,5 @@ export const dynamic = "force-dynamic";
 export default async function WhoAmIPage() {
   if (!meetConfig.whoamiEnabled()) notFound();
   const users = await getProfileRepository().list();
-  return <WhoAmI users={users.map((u) => ({ id: u.id, displayName: u.displayName, isSeed: u.isSeed }))} />;
+  return <WhoAmI users={users.map((u) => ({ id: u.id, displayName: u.displayName, isSeed: u.isSeed, discoverable: u.discoverable }))} />;
 }

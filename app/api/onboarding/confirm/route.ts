@@ -19,6 +19,8 @@ const Body = z.object({
   id: z.string().refine(isValidProfileId).optional(),
   /** Analytics/debug only. */
   onboardingMode: z.enum(["quick", "full"]).optional(),
+  /** "Suggest me to other fish" (unchecked by default). */
+  discoverable: z.boolean().optional(),
 });
 
 /**
@@ -34,6 +36,7 @@ export const POST = withRoute("POST /api/onboarding/confirm", async (req) => {
     rawAnswers: body.data.rawAnswers,
     appearance: getAppearance(body.data.appearance),
     onboardingMode: body.data.onboardingMode,
+    discoverable: body.data.discoverable,
   };
   const repo = getProfileRepository();
   if (body.data.id) {

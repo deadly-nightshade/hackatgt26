@@ -25,6 +25,9 @@ export default function MePage() {
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [quick, setQuick] = useState(false);
+  const [discoverable, setDiscoverable] = useState(false);
+  const [discoverableError, setDiscoverableError] = useState<string | null>(null);
+  const [counts, setCounts] = useState<{ friends: number; strangers: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const onDirtyChange = useCallback((d: boolean) => setDirty(d), []);
   /** Unsaved profile edits: confirm before following a link away. */
@@ -43,11 +46,31 @@ export default function MePage() {
         const appearance = getAppearance(j.appearance);
         setProfile(j.profile);
         setQuick(j.onboardingMode === "quick");
+        setDiscoverable(j.discoverable === true);
+        setCounts(j.counts ?? null);
         setSaved(appearance);
         setLook(appearance);
       })
       .catch(() => router.replace("/onboarding?returnTo=/me"));
   }, [router]);
+
+  /** Consent toggle: saved right away (never resets any AI cache). */
+  async function toggleDiscoverable(next: boolean) {
+    if (!id) return;
+    setDiscoverable(next);
+    setDiscoverableError(null);
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(id)}/discoverable`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", [FISH_ID_HEADER]: id },
+        body: JSON.stringify({ discoverable: next }),
+      });
+      if (!res.ok) throw new Error(`Couldn't save (${res.status})`);
+    } catch (err) {
+      setDiscoverable(!next);
+      setDiscoverableError((err as Error).message);
+    }
+  }
 
   async function saveLook() {
     if (!id) return;
@@ -89,6 +112,11 @@ export default function MePage() {
           }}
           name={profile.displayName}
         />
+        {counts && (
+          <p className="friend-count">
+            🐟 {counts.friends} fish {counts.friends === 1 ? "friend" : "friends"} · {counts.strangers} just met
+          </p>
+        )}
         <div className="row creator-actions">
           {changed && (
             <button className="secondary" onClick={() => setLook(saved)} disabled={save.kind === "saving"}>
@@ -103,6 +131,13 @@ export default function MePage() {
           {save.kind === "saved" && !changed && "Saved! Your fish is showing off its new look on the island. ✨"}
           {save.kind === "error" && <span className="error">{save.message}</span>}
         </p>
+      </section>
+
+      <section className="card">
+        <label className="consent">
+          <input type="checkbox" checked={discoverable} onChange={(e) => void toggleDiscoverable(e.target.checked)} /> 🐟 Suggest me to other fish — they'll see my name and the interests we share.
+        </label>
+        {discoverableError && <p className="error">{discoverableError}</p>}
       </section>
 
       {editing && id ? (

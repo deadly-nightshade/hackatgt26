@@ -16,6 +16,7 @@
     "list:fish": "tsx scripts/list-fish.ts",
     "remove:fish": "tsx scripts/remove-fish.ts",
     "merge:fish": "tsx scripts/merge-fish.ts",
+    "recs": "tsx scripts/recs.ts",
     "build:scene": "tsx scripts/build-world-scene.ts"
   },
   "dependencies": {
