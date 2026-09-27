@@ -12,6 +12,7 @@
  *   npm run seed:fish -- --clear
  */
 import "./loadEnv";
+import { getAppearance } from "@/lib/fish/appearance";
 import { MockMeetAI } from "@/lib/meet/ai";
 import { runMeet, type MeetDeps } from "@/lib/meet/pipeline";
 import { pairKeyOf } from "@/lib/meet/schema";
@@ -31,6 +32,8 @@ type SeedSpec = {
   energy: Profile["socialStyle"]["energy"];
   stall: string;
   catchphrase: string;
+  /** Head accessory id (lib/fish/appearance.ts). */
+  head: string | null;
 };
 
 // Scenarios are relative to the real test profile (gacha games, crosswords,
@@ -50,6 +53,7 @@ const SEEDS: SeedSpec[] = [
     energy: "homebody",
     stall: "a lantern-lit stall trading puzzle books for bubble tea",
     catchphrase: "One more pull, then one more puzzle!",
+    head: "head-bow",
   },
   {
     id: "seed-2-close-only",
@@ -65,6 +69,7 @@ const SEEDS: SeedSpec[] = [
     energy: "balanced",
     stall: "a yarn-and-cookie stand with a board game corner",
     catchphrase: "Warm cookies, warmer scarves!",
+    head: "head-bunny",
   },
   {
     id: "seed-3-bridge-only",
@@ -79,6 +84,7 @@ const SEEDS: SeedSpec[] = [
     energy: "out_and_about",
     stall: "a neon esports booth with a tiny dance floor",
     catchphrase: "Clutch or kick — let's go!",
+    head: "head-shades",
   },
   {
     id: "seed-4-zero-overlap",
@@ -94,6 +100,7 @@ const SEEDS: SeedSpec[] = [
     energy: "out_and_about",
     stall: "a protein-shake shack next to the trailhead map",
     catchphrase: "Rise, run, refuel!",
+    head: "head-headphones",
   },
   {
     id: "seed-5-twin",
@@ -111,6 +118,7 @@ const SEEDS: SeedSpec[] = [
     energy: "homebody",
     stall: "a blanket-fort stall with skewers and a daily puzzle board",
     catchphrase: "Skewer in one hand, controller in the other!",
+    head: "head-karen",
   },
 ];
 
@@ -145,13 +153,16 @@ async function main() {
   // Quiet the repositories' pretty-printing of every saved profile.
   const log = console.log;
   for (const s of SEEDS) {
+    const appearance = getAppearance({ head: s.head });
     if (await profiles.get(s.id)) {
-      log(`skip   ${s.id}  (already seeded)`);
+      // Appearance only (never touches updatedAt, so their pair AI caches stay valid).
+      await profiles.setAppearance(s.id, appearance);
+      log(`skip   ${s.id}  (already seeded; look → ${s.head ?? "plain"})`);
       continue;
     }
     console.log = () => {};
     try {
-      await profiles.save({ id: s.id, profile: buildSeedProfile(s), rawAnswers: [], isSeed: true });
+      await profiles.save({ id: s.id, profile: buildSeedProfile(s), rawAnswers: [], isSeed: true, appearance });
     } finally {
       console.log = log;
     }

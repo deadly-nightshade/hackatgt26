@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_APPEARANCE, getAppearance, type Appearance } from "@/lib/fish/appearance";
 import { ProfileSchema, type Answer, type Profile } from "@/lib/profile/schema";
 import { log } from "@/lib/util/log";
 
@@ -13,6 +14,8 @@ export type ProfileRecord = {
   createdAt?: Date;
   /** Test residents from `npm run seed:fish`. */
   isSeed?: boolean;
+  /** Chosen in the onboarding creator (default: plain fish). */
+  appearance?: Appearance;
 };
 
 /** A saved profile as read back (for meet-ups and dev tools). */
@@ -20,8 +23,11 @@ export type StoredProfile = {
   id: string;
   profile: Profile;
   createdAt: Date;
+  /** Content changes only — the pair AI cache keys on this, so appearance edits never touch it. */
   updatedAt: Date;
   isSeed: boolean;
+  /** Always complete: missing/partial/unknown slots read as "none" (getAppearance). */
+  appearance: Appearance;
 };
 
 export type ProfileListItem = { id: string; displayName: string; isSeed: boolean; updatedAt: Date };
@@ -31,6 +37,8 @@ export interface ProfileRepository {
   get(id: string): Promise<StoredProfile | null>;
   list(): Promise<ProfileListItem[]>;
   delete(id: string): Promise<void>;
+  /** Saves appearance + appearanceUpdatedAt only (NOT updatedAt). False if the profile doesn't exist. */
+  setAppearance(id: string, appearance: Appearance): Promise<boolean>;
 }
 
 export function newProfileId(): string {
@@ -64,6 +72,7 @@ export function toStoredProfile(doc: Record<string, unknown> & { _id: string }):
     createdAt: date(doc.createdAt),
     updatedAt: date(doc.updatedAt),
     isSeed: doc.isSeed === true,
+    appearance: getAppearance(doc.appearance),
   };
 }
 
@@ -86,6 +95,8 @@ export class ConsoleFileRepository implements ProfileRepository {
           updatedAt: now,
           ...(record.isSeed ? { isSeed: true } : {}),
           ...record.profile,
+          appearance: getAppearance(record.appearance ?? DEFAULT_APPEARANCE),
+          appearanceUpdatedAt: now,
           rawAnswers: record.rawAnswers,
         },
         null,
@@ -116,5 +127,14 @@ export class ConsoleFileRepository implements ProfileRepository {
   async delete(id: string): Promise<void> {
     if (!isValidProfileId(id)) return;
     await rm(path.join(this.dir, `${id}.json`), { force: true });
+  }
+
+  async setAppearance(id: string, appearance: Appearance): Promise<boolean> {
+    if (!isValidProfileId(id)) return false;
+    const file = path.join(this.dir, `${id}.json`);
+    const doc = await readFile(file, "utf8").then(JSON.parse, () => null);
+    if (!doc) return false;
+    await writeFile(file, JSON.stringify({ ...doc, appearance: getAppearance(appearance), appearanceUpdatedAt: new Date().toISOString() }, null, 2));
+    return true;
   }
 }

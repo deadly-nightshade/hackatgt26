@@ -202,8 +202,8 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
       similarity: r.similarity,
       attemptNumber,
       fish: {
-        a: { id: initiatorId, displayName: initiator.profile.displayName },
-        b: { id: targetId, displayName: target.profile.displayName },
+        a: { id: initiatorId, displayName: initiator.profile.displayName, appearance: initiator.appearance },
+        b: { id: targetId, displayName: target.profile.displayName, appearance: target.appearance },
       },
       level: pair.level,
       levelName: pair.status === "friends" ? levelName(pair.level) : null,

@@ -1,3 +1,4 @@
+import { DEFAULT_APPEARANCE } from "@/lib/fish/appearance";
 import { levelName } from "@/lib/meet/config";
 import { kindOf, type AttemptKind, type MeetAttempt, type Pair } from "@/lib/meet/schema";
 import type { PairRepository } from "@/lib/storage/pairRepo";
@@ -32,6 +33,7 @@ export async function getResidentsFor(userId: string, deps: WorldDeps): Promise<
       return {
         id: otherId,
         displayName: other.profile.displayName,
+        appearance: other.appearance,
         pairKey: p.pairKey,
         status: p.status,
         level: friends ? p.level : 0,
@@ -61,7 +63,7 @@ export async function getWorld(userId: string, deps: WorldDeps): Promise<WorldRe
   }
 
   return {
-    me: { id: userId, displayName: me.profile.displayName, catchphrase: me.profile.residentFlavor.catchphrase },
+    me: { id: userId, displayName: me.profile.displayName, catchphrase: me.profile.residentFlavor.catchphrase, appearance: me.appearance },
     residents,
     bumpLines,
   };
@@ -99,11 +101,12 @@ export async function getReplay(attemptId: string, userId: string, deps: WorldDe
   if (!attempt.script?.length) throw new HttpError(404, "Replay unavailable for this one");
 
   const targetId = attempt.targetId ?? (pair.userIds[0] === attempt.initiatorId ? pair.userIds[1] : pair.userIds[0]);
-  const nameOf = async (id: string, saved?: string) => saved ?? (await deps.profiles.get(id))?.profile.displayName ?? "???";
+  const [a, b] = await Promise.all([deps.profiles.get(attempt.initiatorId), deps.profiles.get(targetId)]);
   return {
     kind: kind(attempt),
     createdAt: attempt.createdAt.toISOString(),
-    names: { a: await nameOf(attempt.initiatorId, attempt.initiatorName), b: await nameOf(targetId, attempt.targetName) },
+    names: { a: attempt.initiatorName ?? a?.profile.displayName ?? "???", b: attempt.targetName ?? b?.profile.displayName ?? "???" },
+    appearances: { a: a?.appearance ?? DEFAULT_APPEARANCE, b: b?.appearance ?? DEFAULT_APPEARANCE },
     script: attempt.script.map(({ speaker, text, mood }) => ({ speaker, text, mood })),
   };
 }

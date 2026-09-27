@@ -1,19 +1,23 @@
 "use client";
 
-import Image, { getImageProps } from "next/image";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CutscenePlayer, FishSprite } from "@/app/_components/Cutscene";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { CutscenePlayer } from "@/app/_components/Cutscene";
+import { FishArtPreloader, FishSprite } from "@/app/_components/FishSprite";
 import { LEVELS } from "@/lib/meet/config";
 import { getFishId } from "@/lib/meet/identity";
 import type { AttemptKind } from "@/lib/meet/schema";
-import { WORLD, WORLD_BG, WORLD_COLORS } from "@/lib/world/config";
+import { FRAMING, WORLD, WORLD_COLORS } from "@/lib/world/config";
+import { SCENE_BASE, SPRITES } from "@/lib/world/scene";
 import type { HistoryItem, ReplayResponse, Resident, WorldResponse } from "@/lib/world/types";
 import { useWorldSim } from "@/lib/world/useWorldSim";
+import { DebugOverlay, DebugPanel } from "./Debug";
+import { SceneSprite } from "./SceneSprite";
 
-// Optimized (resized) URL for the side copies; CSS backgrounds can't use <Image>.
-const STRIP_SRC = getImageProps({ src: WORLD_BG.src, width: 1080, height: 1080, alt: "" }).props.src;
+/** Every world fish sprite uses this hint, so the preloader fetches the same image candidates. */
+const WORLD_FISH_SIZES = "(max-width: 600px) 80px, 130px";
 
 type Load = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; world: WorldResponse };
 
@@ -50,8 +54,16 @@ export default function World() {
 function Island({ world }: { world: WorldResponse }) {
   const { me, residents } = world;
   const ids = useMemo(() => [me.id, ...residents.map((r) => r.id)], [me.id, residents]);
-  const { worldRef, register, swimTo } = useWorldSim(ids, world.bumpLines, me.id);
+  // ?debug=1 draws the walk/activity geometry + a control panel; ?demo=1 (or NEXT_PUBLIC_WORLD_DEMO=1) speeds everything up.
+  const [flags] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    return { debug: q.get("debug") === "1", demo: q.get("demo") === "1" || process.env.NEXT_PUBLIC_WORLD_DEMO === "1" };
+  });
+  const sim = useWorldSim(ids, world.bumpLines, me.id, flags);
+  const { worldRef, register, registerTag, registerItem, registerTarget, swimTo } = sim;
   const [card, setCard] = useState<Resident | "me" | null>(null);
+  // The dashed walk/zone overlay: on for plain ?debug=1, off when recording a demo.
+  const [geometry, setGeometry] = useState(!flags.demo);
   const [replayId, setReplayId] = useState<string | null>(null);
 
   // Esc closes the topmost layer.
@@ -66,20 +78,28 @@ function Island({ world }: { world: WorldResponse }) {
   }, [replayId]);
 
   const byId = new Map(residents.map((r) => [r.id, r]));
+  const vars = { "--sky": WORLD_COLORS.sky, "--sea": WORLD_COLORS.sea, "--sky-share": FRAMING.SKY_SHARE, "--strip": `url(${SCENE_BASE.strip})` } as CSSProperties;
   return (
-    <div className="world-page" style={{ "--sky": WORLD_COLORS.sky, "--sea": WORLD_COLORS.sea } as React.CSSProperties}>
-      {/* Blurred copy fills the letterbox around the fitted (square) world. */}
-      <Image className="world-backdrop" src={WORLD_BG.src} alt="" fill sizes="200px" />
+    <div className="world-page" style={vars}>
       <header className="world-header">
         <span className="world-title">🏝️ {me.displayName}&apos;s island</span>
-        <Link href="/me">My profile</Link>
+        <Link className="world-profile-btn" href="/me" aria-label="My profile">
+          🐟 Me
+        </Link>
       </header>
+      <FishArtPreloader sizes={WORLD_FISH_SIZES} />
 
+      {/* Sky block above, ocean block below; the scene fits the width (height on landscape). */}
+      <div className="world-sky" />
       <div className="world-row">
-        {/* Copies of the market to either side, aligned with the island, so wide screens look endless. */}
-        <div className="world-strip" style={{ backgroundImage: `url(${STRIP_SRC})` }} aria-hidden />
+        {/* Copies of the base beside the scene on wide screens (dock planks tile; the strip's ocean is pre-flipped to meet the edges). */}
+        <div className="world-strip left" aria-hidden />
+        <div className="world-strip right" aria-hidden />
         <div className="world" ref={worldRef}>
-          <Image className="world-bg" src={WORLD_BG.src} alt="The seaside market" fill sizes="(max-width: 900px) 100vw, 900px" priority />
+          <Image className="world-bg" src={SCENE_BASE.src} alt="The seaside market" fill sizes="(max-aspect-ratio: 1/1) 100vw, 100vh" priority />
+          {SPRITES.map((s) => (
+            <SceneSprite key={s.id} sprite={s} ref={s.item || s.hops ? registerItem(s.id) : undefined} />
+          ))}
           {ids.map((id) => {
             const r = byId.get(id);
             const isMe = id === me.id;
@@ -93,29 +113,45 @@ function Island({ world }: { world: WorldResponse }) {
                 onClick={() => setCard(r ?? "me")}
                 aria-label={isMe ? `You (${me.displayName})` : r?.displayName}
               >
-                <span className="wfish-bubble" hidden />
-                <span className="wfish-name">{isMe ? "You" : r?.displayName}</span>
                 <span className="wfish-body">
-                  <FishSprite facing="left" sizes="(max-width: 600px) 80px, 130px" />
+                  <FishSprite appearance={isMe ? me.appearance : r?.appearance} sizes={WORLD_FISH_SIZES} />
                 </span>
               </button>
             );
           })}
+          {ids.map((id) => (
+            <div key={id} ref={registerTag(id)} className={`wtag${id === me.id ? " me" : ""}`} aria-hidden>
+              <span className="wfish-bubble" hidden />
+              <span className="wfish-name">{id === me.id ? "You" : byId.get(id)?.displayName}</span>
+            </div>
+          ))}
+          {flags.debug && geometry && <DebugOverlay ids={ids} registerTarget={registerTarget} />}
           {residents.length === 0 && (
             <div className="world-empty">No fish here yet — tap a friend&apos;s NFC tag to meet them! 🌊</div>
           )}
         </div>
       </div>
+      <div className="world-sea" />
 
       <p className="world-hint">Tap a fish to see your story together</p>
+      {flags.debug && <DebugPanel sim={sim} geometry={geometry} onGeometry={setGeometry} />}
 
       {card === "me" && (
-        <Sheet onClose={() => setCard(null)}>
-          <h2>{me.displayName} 🐟</h2>
-          <p>
-            <em>“{me.catchphrase}”</em>
-          </p>
-          <Link href="/me">View my profile →</Link>
+        <Sheet onClose={() => setCard(null)} className="fish-card">
+          <div className="fish-card-head">
+            <div className="fish-card-sprite">
+              <FishSprite appearance={me.appearance} sizes="72px" />
+            </div>
+            <div>
+              <h2>{me.displayName}</h2>
+              <p className="muted">
+                <em>“{me.catchphrase}”</em>
+              </p>
+            </div>
+          </div>
+          <Link className="button swim-btn" href="/me">
+            Edit my fish ✨
+          </Link>
         </Sheet>
       )}
       {card && card !== "me" && (
@@ -213,7 +249,7 @@ function FishCard({
     <Sheet onClose={onClose} className="fish-card">
       <div className="fish-card-head">
         <div className={`fish-card-sprite${friends ? "" : " stranger"}`}>
-          <FishSprite facing="left" sizes="72px" />
+          <FishSprite appearance={r.appearance} sizes="72px" />
         </div>
         <div>
           <h2>{r.displayName}</h2>
@@ -285,6 +321,7 @@ function ReplayModal({ attemptId, meId, onClose }: { attemptId: string; meId: st
           <CutscenePlayer
             script={replay.script}
             names={replay.names}
+            appearances={replay.appearances}
             renderEnd={(again) => (
               <div className="dialogue end">
                 <span className="text">{KIND_LABEL[replay.kind]}</span>

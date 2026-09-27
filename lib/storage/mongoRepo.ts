@@ -1,5 +1,6 @@
 import { MongoClient, type Collection, type Db } from "mongodb";
 import { config } from "@/lib/config";
+import { DEFAULT_APPEARANCE, getAppearance, type Appearance } from "@/lib/fish/appearance";
 import type { Answer, Profile } from "@/lib/profile/schema";
 import {
   isValidProfileId,
@@ -18,6 +19,9 @@ export type ProfileDocument = Profile & {
   updatedAt: Date;
   rawAnswers: Answer[];
   isSeed?: boolean;
+  /** Missing on profiles from before customization (read as the plain fish). */
+  appearance?: Appearance;
+  appearanceUpdatedAt?: Date;
 };
 
 // Reuse one client across hot reloads / warm serverless invocations.
@@ -76,6 +80,8 @@ export class MongoProfileRepository implements ProfileRepository {
       createdAt: record.createdAt ?? now,
       updatedAt: now,
       rawAnswers: record.rawAnswers,
+      appearance: getAppearance(record.appearance ?? DEFAULT_APPEARANCE),
+      appearanceUpdatedAt: now,
       ...(record.isSeed ? { isSeed: true } : {}),
     });
     return { id };
@@ -97,6 +103,16 @@ export class MongoProfileRepository implements ProfileRepository {
 
   async delete(id: string): Promise<void> {
     await (await this.collection()).deleteOne({ _id: id });
+  }
+
+  async setAppearance(id: string, appearance: Appearance): Promise<boolean> {
+    if (!isValidProfileId(id)) return false;
+    // Deliberately NOT updatedAt: the pair AI cache keys on it and must only reset on content changes.
+    const res = await (await this.collection()).updateOne(
+      { _id: id },
+      { $set: { appearance: getAppearance(appearance), appearanceUpdatedAt: new Date() } },
+    );
+    return res.matchedCount > 0;
   }
 }
 

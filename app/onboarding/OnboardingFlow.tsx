@@ -3,13 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { FishCreator } from "@/app/_components/FishCreator";
+import { FishSprite } from "@/app/_components/FishSprite";
+import { DEFAULT_APPEARANCE, getAppearance, type Appearance } from "@/lib/fish/appearance";
 import { setFishId } from "@/lib/meet/identity";
 import type { OnboardingQuestion } from "@/lib/onboarding/questions";
 import type { Answer, Profile } from "@/lib/profile/schema";
 import AnswerInput from "./AnswerInput";
+import FindMyFish from "./FindMyFish";
 import ReviewProfile from "./ReviewProfile";
 
-type Step = "name" | "questions" | "building" | "review" | "saved";
+type Step = "name" | "questions" | "creator" | "review" | "saved";
+
+/** Profile extraction runs in the background while the user dresses their fish. */
+type Extraction = { status: "idle" | "running" | "done" } | { status: "error"; message: string };
+
+/** The chosen look survives a refresh until the profile is confirmed. */
+const LOOK_KEY = "onboarding-appearance";
 
 type AnswerState = {
   main: string;
@@ -65,6 +75,27 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [extraction, setExtraction] = useState<Extraction>({ status: "idle" });
+  const [appearance, setAppearance] = useState<Appearance>(DEFAULT_APPEARANCE);
+  // Only the latest extraction counts (answers can be edited and re-submitted).
+  const extractRun = useRef(0);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(LOOK_KEY);
+      if (saved) setAppearance(getAppearance(JSON.parse(saved)));
+    } catch {
+      // private mode etc. — start from the plain fish
+    }
+  }, []);
+  const chooseLook = (next: Appearance) => {
+    setAppearance(next);
+    try {
+      sessionStorage.setItem(LOOK_KEY, JSON.stringify(next));
+    } catch {
+      // not persisted; still kept in state
+    }
+  };
 
   const questionAudio = useAudioPlayer();
   const followUpAudio = useAudioPlayer();
@@ -93,7 +124,11 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
     questionAudio.stop();
     followUpAudio.stop();
     if (qIndex < questions.length - 1) setQIndex(qIndex + 1);
-    else buildProfile();
+    else {
+      // Don't wait: extraction runs while the user picks a look.
+      void buildProfile();
+      setStep("creator");
+    }
   }
 
   async function playFollowUp(text: string) {
@@ -136,8 +171,9 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
   }
 
   async function buildProfile() {
-    setStep("building");
-    setError(null);
+    const run = ++extractRun.current;
+    setExtraction({ status: "running" });
+    setProfile(null);
     try {
       const res = await fetch("/api/onboarding/extract", {
         method: "POST",
@@ -147,11 +183,13 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || `Something went wrong (${res.status})`);
+      if (run !== extractRun.current) return;
       setProfile(json.profile);
-      setStep("review");
+      setExtraction({ status: "done" });
     } catch (err) {
+      if (run !== extractRun.current) return;
       const e = err as Error;
-      setError(e.name === "TimeoutError" ? "That took too long — please try again." : e.message);
+      setExtraction({ status: "error", message: e.name === "TimeoutError" ? "That took too long — please try again." : e.message });
     }
   }
 
@@ -162,12 +200,17 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
       const res = await fetch("/api/onboarding/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile: edited, rawAnswers: rawAnswers() }),
+        body: JSON.stringify({ profile: edited, rawAnswers: rawAnswers(), appearance }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || `Save failed (${res.status})`);
       setSavedId(json.id);
       setFishId(json.id);
+      try {
+        sessionStorage.removeItem(LOOK_KEY);
+      } catch {
+        // ignore
+      }
       setStep("saved");
       if (returnTo) router.replace(returnTo);
     } catch (err) {
@@ -189,6 +232,7 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
             Start
           </button>
         </div>
+        <FindMyFish initialName={displayName} onFound={() => router.replace(returnTo ?? "/world")} />
       </main>
     );
   }
@@ -267,23 +311,33 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
     );
   }
 
-  if (step === "building") {
+  if (step === "creator") {
+    const ready = extraction.status === "done" && profile;
     return (
-      <main>
-        <h1>Building your resident…</h1>
-        {!error ? (
-          <p className="muted">Reading your answers and setting up your market stall. This takes a few seconds.</p>
-        ) : (
-          <>
-            <p className="error">{error}</p>
-            <div className="row">
-              <button onClick={buildProfile}>Try again</button>
-              <button className="secondary" onClick={() => setStep("questions")}>
-                Edit answers
-              </button>
-            </div>
-          </>
-        )}
+      <main className="creator-page">
+        <h1>Dress up your fish 🐟</h1>
+        <FishCreator appearance={appearance} onChange={chooseLook} name={displayName.trim()} />
+        <p className={`creator-status${ready ? " ready" : ""}`} aria-live="polite">
+          {extraction.status === "error" ? (
+            <span className="error">{extraction.message}</span>
+          ) : ready ? (
+            "Ready! ✨"
+          ) : (
+            "Your fish is getting to know you… 🫧"
+          )}
+        </p>
+        <div className="row creator-actions">
+          <button className="secondary" onClick={() => setStep("questions")}>
+            Edit answers
+          </button>
+          {extraction.status === "error" ? (
+            <button onClick={() => void buildProfile()}>Retry</button>
+          ) : (
+            <button onClick={() => setStep("review")} disabled={!ready}>
+              Next
+            </button>
+          )}
+        </div>
       </main>
     );
   }
@@ -291,7 +345,12 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
   if (step === "review" && profile) {
     return (
       <main>
-        <h1>Is this you, {profile.displayName}?</h1>
+        <div className="review-head">
+          <button type="button" className="review-fish" onClick={() => setStep("creator")} aria-label="Change my look">
+            <FishSprite appearance={appearance} sizes="96px" />
+          </button>
+          <h1>Is this you, {profile.displayName}?</h1>
+        </div>
         <p className="muted">Remove anything that doesn&apos;t feel right. Nothing is saved until you confirm.</p>
         <ReviewProfile profile={profile} onConfirm={confirm} saving={saving} />
         {error && <p className="error">{error}</p>}

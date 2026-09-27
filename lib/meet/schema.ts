@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Appearance } from "@/lib/fish/appearance";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 /** Safe for client components (no server-only deps). */
@@ -150,7 +151,7 @@ export type MeetResponse = {
   script: DialogueLine[];
   similarity: number;
   attemptNumber: number;
-  fish: { a: { id: string; displayName: string }; b: { id: string; displayName: string } };
+  fish: { a: { id: string; displayName: string; appearance: Appearance }; b: { id: string; displayName: string; appearance: Appearance } };
   level: number;
   levelName: string | null;
   leveledUp: boolean;

@@ -58,7 +58,10 @@ a.button.secondary { color: #1f6f8b; }
   font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: #fff; text-shadow: 0 0 3px #1d2a30, 0 1px 2px #1d2a30, 0 0 6px rgba(0,0,0,.4);
 }
-.fish-sprite { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; transition: transform .2s ease; }
+/* A fish = base + accessory overlays stacked 1:1 in one box (app/_components/FishSprite.tsx). */
+.fish-sprite { position: relative; display: block; width: 100%; aspect-ratio: 2048 / 2330; user-select: none; -webkit-user-drag: none; transition: transform .2s ease; }
+.fish-sprite > img { user-select: none; -webkit-user-drag: none; pointer-events: none; }
+.fish-preload { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 .fish-sprite.flip { transform: scaleX(-1); }
 .fish .fish-sprite { max-width: 190px; filter: drop-shadow(0 4px 2px rgba(0,0,0,.18)); }
 .fish.active .fish-sprite { filter: drop-shadow(0 0 6px #f6c453) drop-shadow(0 0 2px #f6c453); }
@@ -83,37 +86,58 @@ a.button.secondary { color: #1f6f8b; }
 
 /* ── /world: the island ─────────────────────────────────────────────────── */
 .world-page {
-  min-height: 100dvh; display: flex; flex-direction: column; align-items: center; overflow: hidden;
-  background: linear-gradient(var(--sky) 0 50%, var(--sea) 50% 100%);
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--sky);
 }
-.world-backdrop { position: fixed !important; object-fit: cover; filter: blur(18px) saturate(1.1); transform: scale(1.15); z-index: 0; pointer-events: none; }
-.world-header, .world, .world-hint { position: relative; z-index: 1; }
-/* Center the island + hint in the space under the header (tall phones). */
-.world-row { margin-top: auto; position: relative; z-index: 1; width: 100%; display: flex; justify-content: center; }
-/* Tiles are exactly the island's size and centered on it, so the seams line up with its edges. */
+/* Leftover height: --sky-share of it above the scene (sky), the rest below (ocean). */
+.world-sky { flex: var(--sky-share) 1 0; }
+.world-sea { flex: calc(1 - var(--sky-share)) 1 0; background: var(--sea); margin-top: -1px; }
+.world-row { flex: none; position: relative; z-index: 1; width: 100%; display: flex; justify-content: center; }
+/* Copies of the scene's base beside it (only visible on landscape screens). */
 .world-strip {
-  position: absolute; inset: 0; pointer-events: none;
-  background-repeat: repeat-x; background-size: auto 100%; background-position: center;
+  position: absolute; top: 0; bottom: 0; aspect-ratio: 1 / 1; pointer-events: none;
+  background: var(--strip) center / 100% 100% no-repeat;
 }
-.world-hint { margin-bottom: auto !important; }
+.world-strip.left { right: calc(50% + min(50vw, 50dvh)); }
+.world-strip.right { left: calc(50% + min(50vw, 50dvh)); }
 .world-header {
-  width: min(100%, 900px); display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  padding: 10px 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: calc(8px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 8px calc(16px + env(safe-area-inset-left));
+  color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6);
 }
 .world-title { font-weight: 700; font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .world-header a { color: #fff; font-weight: 600; white-space: nowrap; }
-/* Square art: fit inside the viewport (minus header + hint), never stretched. */
+/* Square scene: full width on phones, full height on landscape screens; never stretched. */
 .world {
-  position: relative; width: min(100%, calc(100dvh - 96px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 900px);
+  position: relative; width: min(100vw, 100dvh);
   aspect-ratio: 1 / 1; overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none;
 }
-.world-bg { object-fit: contain; pointer-events: none; }
-.world-hint { margin: 6px 16px 10px; padding: 3px 12px; border-radius: 999px; background: rgba(29,42,48,.45); color: #fff; font-size: .9rem; text-align: center; }
+.world-bg { object-fit: cover; pointer-events: none; }
+.world-hint {
+  position: absolute; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 2;
+  margin: 0; padding: 3px 12px; border-radius: 999px; background: rgba(29,42,48,.45); color: #fff; font-size: .9rem; text-align: center; white-space: nowrap;
+}
 .world-empty {
-  position: absolute; left: 50%; top: 26%; transform: translateX(-50%); width: min(80%, 320px); z-index: 3000;
+  position: absolute; left: 50%; top: 26%; transform: translateX(-50%); width: min(80%, 320px); z-index: 45000;
   background: rgba(255,255,255,.92); border-radius: 14px; padding: 12px 14px; text-align: center; font-weight: 600;
 }
+
+/* Scene props + activity items (positions/z from lib/world/scene.ts). */
+.wsprite { position: absolute; pointer-events: none; }
+.wsprite img { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; }
+.witem { opacity: 0; transform: scale(.8); transform-origin: 50% 100%; transition: opacity .35s ease, transform .35s cubic-bezier(.3,1.6,.5,1); }
+.witem.on { opacity: 1; transform: scale(1); }
+.wplaceholder {
+  display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; box-sizing: border-box;
+  border: 2px dashed #1d2a30; border-radius: 10px; background: rgba(255,255,255,.7); color: #1d2a30;
+  font-size: clamp(8px, 1.3vw, 13px); font-weight: 700; text-align: center; line-height: 1.1; padding: 2px;
+}
+.wsprite[data-id="ocean"] img { animation: drift 6s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: translate(-.8%, 0) scaleX(1.02); } to { transform: translate(.8%, 1.2%) scaleX(1.02); } }
+.wsprite[data-hops] img { transform-origin: 50% 100%; animation: idle-hop 9s ease-in-out infinite; }
+.wsprite[data-hops].hop img { animation: hop .35s ease-out 2; }
+@keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14%) scaleY(1.04); } }
+@keyframes idle-hop { 0%, 88%, 100% { transform: none; } 91% { transform: translateY(-10%); } 94% { transform: scaleX(-1); } 97% { transform: scaleX(-1) translateY(-6%); } }
 
 .wfish {
   position: absolute; left: 0; top: 0; padding: 0; margin: 0; border: 0; border-radius: 0; background: none; color: inherit;
@@ -127,14 +151,23 @@ a.button.secondary { color: #1f6f8b; }
 .wfish[data-facing="right"] .wfish-body { transform: scaleX(-1); }
 .wfish-body .fish-sprite { filter: drop-shadow(0 3px 2px rgba(0,0,0,.2)); }
 .wfish.walking .wfish-body .fish-sprite { animation: bob .45s ease-in-out infinite alternate; }
+/* Activity poses. */
+.wfish[data-pose="dig"] .wfish-body .fish-sprite { transform-origin: 50% 100%; animation: dig .32s ease-in-out infinite alternate; }
+.wfish[data-pose="shop"] .wfish-body .fish-sprite { transform-origin: 50% 100%; animation: sway 1.6s ease-in-out infinite alternate; }
+.wfish[data-pose="sit"] .wfish-body .fish-sprite { transform-origin: 50% 100%; animation: sway 2.4s ease-in-out infinite alternate; }
+@keyframes dig { from { transform: rotate(-7deg) translateY(0); } to { transform: rotate(6deg) translateY(4%); } }
+@keyframes sway { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
 @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-5%); } }
 .wfish.stranger .wfish-body { opacity: .6; }
+/* Name + bubble: a separate layer above every prop, moved to the fish's head each frame. */
+.wtag { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 40000; pointer-events: none; will-change: transform; }
+.wtag:not([data-ready]) { visibility: hidden; }
 .wfish-name {
   position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 2px;
   font-size: clamp(12px, 1.5vw, 14px); font-weight: 700; line-height: 1.2; white-space: nowrap; color: #fff;
   text-shadow: 0 0 3px #1d2a30, 0 1px 2px #1d2a30, 0 0 1px #1d2a30;
 }
-.wfish.me .wfish-name { background: #f6c453; color: #1d2a30; text-shadow: none; padding: 1px 8px; border-radius: 999px; }
+.wtag.me .wfish-name { background: #f6c453; color: #1d2a30; text-shadow: none; padding: 1px 8px; border-radius: 999px; }
 .wfish-bubble {
   position: absolute; left: 50%; bottom: calc(100% + 1.6em); transform: translateX(-50%);
   background: #fff; color: #1d2a30; border: 2px solid #1d2a30; border-radius: 12px; padding: 3px 9px;
@@ -147,7 +180,9 @@ a.button.secondary { color: #1f6f8b; }
 .wfish-bubble[hidden] { display: none; }
 @keyframes pop { from { transform: translateX(-50%) scale(.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .wfish.walking .wfish-body .fish-sprite, .wfish-bubble { animation: none; }
+  .wfish.walking .wfish-body .fish-sprite, .wfish-bubble, .wfish[data-pose] .wfish-body .fish-sprite,
+  .wsprite[data-id="ocean"] img, .wsprite[data-hops] img { animation: none; }
+  .wsprite[data-hops].hop img { animation: hop .35s ease-out 1; }
 }
 
 /* Popup: bottom sheet on phones, centered card on desktop. */
@@ -184,3 +219,86 @@ ul.history button:disabled { opacity: .6; }
 .replay-backdrop { position: fixed; inset: 0; z-index: 6000; background: #fdf8f0; overflow-y: auto; }
 .replay { position: relative; }
 .replay > .sheet-close { top: calc(4px + env(safe-area-inset-top)); right: calc(4px + env(safe-area-inset-right)); background: rgba(255,255,255,.85); }
+
+/* /world?debug=1 */
+.world-debug { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 35000; pointer-events: none; }
+.world-debug * { vector-effect: non-scaling-stroke; }
+.dbg-walk { fill: rgba(0,200,80,.08); stroke: #0a0; stroke-width: 2; stroke-dasharray: 6 4; }
+.dbg-blocked { fill: rgba(220,0,0,.18); stroke: #c00; stroke-width: 1.5; }
+.dbg-zone { fill: none; stroke: #06f; stroke-width: 1.5; stroke-dasharray: 3 3; }
+.dbg-label { font-size: .018px; fill: #003; font-weight: 700; }
+.dbg-anchor { fill: #ff0; stroke: #000; stroke-width: 1.5; }
+.dbg-via { fill: none; stroke: #fa0; stroke-width: 2; }
+.dbg-target { stroke: #f0f; stroke-width: 1.5; }
+.debug-dock {
+  position: fixed; right: calc(6px + env(safe-area-inset-right)); bottom: calc(6px + env(safe-area-inset-bottom)); z-index: 4000;
+  display: flex; align-items: flex-end; gap: 6px;
+}
+.debug-toggle {
+  width: 22px; height: 22px; min-height: 0; padding: 0; border: 0; border-radius: 50%;
+  background: rgba(29,42,48,.28); color: rgba(255,255,255,.75); font-size: 14px; line-height: 22px; text-align: center;
+}
+.debug-toggle:hover { background: rgba(29,42,48,.5); }
+.debug-panel {
+  width: min(280px, calc(100vw - 48px)); background: rgba(29,42,48,.72); color: #fff; backdrop-filter: blur(4px);
+  border-radius: 12px; padding: 8px; font-size: 11px;
+}
+.debug-panel label { display: block; margin-top: 6px; }
+.debug-panel input[type="range"] { width: 100%; }
+.debug-panel .debug-check { display: flex; align-items: center; gap: 6px; }
+.debug-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.debug-grid button {
+  padding: 4px; min-height: 36px; font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1;
+  background: rgba(255,255,255,.14); color: #fff; border: 0;
+}
+.debug-grid small { opacity: .75; }
+
+/* ── Fish creator (onboarding + /me) ───────────────────────────────────── */
+.creator-page { max-width: 560px; }
+.creator { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 8px 0; }
+.creator-stage {
+  position: relative; width: min(60vw, 320px); margin: 4px 56px;
+  display: grid; place-items: center;
+}
+@media (max-width: 420px) { .creator-stage { width: 60vw; margin: 4px 48px; } }
+.creator-fish { display: block; width: 100%; }
+.creator-fish .fish-sprite { filter: drop-shadow(0 6px 4px rgba(0,0,0,.18)); }
+.creator-fish.pop { animation: fish-pop .22s ease-out; }
+@keyframes fish-pop { 0% { transform: scale(.94); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
+.creator-arrow {
+  position: absolute; width: 48px; height: 48px; padding: 0; border-radius: 50%; font-size: 28px; line-height: 44px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+.creator-arrow.tl { top: 12%; left: -54px; }
+.creator-arrow.tr { top: 12%; right: -54px; }
+.creator-arrow.bl { bottom: 8%; left: -54px; }
+.creator-arrow.br { bottom: 8%; right: -54px; }
+@media (max-width: 420px) {
+  .creator-arrow { width: 44px; height: 44px; }
+  .creator-arrow.tl, .creator-arrow.bl { left: -46px; }
+  .creator-arrow.tr, .creator-arrow.br { right: -46px; }
+}
+.creator-label { margin: 0; text-align: center; min-height: 1.5em; }
+.creator-random { margin-top: 6px; }
+.creator-status { text-align: center; min-height: 1.5em; margin: 8px 0; }
+.creator-status.ready { color: #2e7d4f; font-weight: 700; }
+.creator-actions { justify-content: center; }
+.review-head { display: flex; align-items: center; gap: 12px; }
+.review-head h1 { margin: 0; }
+.review-fish { flex: 0 0 72px; padding: 0; background: none; border: 0; }
+.me-back { margin: 0 0 4px; }
+.me-look h2 { margin-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .creator-fish.pop { animation: none; } }
+
+/* Small profile button in the corner of /world. */
+.world-header a.world-profile-btn {
+  font-size: .85rem; padding: 4px 10px; border-radius: 999px; background: rgba(29,42,48,.35); text-decoration: none; text-shadow: none;
+}
+a.button.swim-btn { display: flex; align-items: center; justify-content: center; background: #1f6f8b; color: #fff; }
+
+/* Onboarding: "Already made your fish?" (recover identity on another browser/app). */
+.find-fish { margin-top: 24px; }
+.find-fish form input { flex: 1 1 160px; min-width: 0; }
+.find-results { list-style: none; padding: 0; margin: 8px 0 0; }
+.find-results button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; margin-bottom: 6px; min-height: 56px; }
+.find-sprite { flex: 0 0 44px; }

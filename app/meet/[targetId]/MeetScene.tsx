@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CutscenePlayer, CutsceneStage } from "@/app/_components/Cutscene";
+import { CutscenePlayer, CutsceneStage, type CutsceneAppearances } from "@/app/_components/Cutscene";
+import { FishArtPreloader } from "@/app/_components/FishSprite";
+import type { Appearance } from "@/lib/fish/appearance";
 import { getFishId } from "@/lib/meet/identity";
 import type { MeetResponse } from "@/lib/meet/schema";
 
@@ -17,11 +19,13 @@ type Phase =
 
 type Names = { a: string; b: string };
 
-async function fetchName(id: string): Promise<string | null> {
+type PublicFish = { displayName: string; appearance: Appearance };
+
+async function fetchFish(id: string): Promise<PublicFish | null> {
   const res = await fetch(`/api/users/${encodeURIComponent(id)}/public`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Couldn't load fish (${res.status})`);
-  return (await res.json()).displayName as string;
+  return (await res.json()) as PublicFish;
 }
 
 const END_TEXT: Record<MeetResponse["outcome"], string> = {
@@ -37,6 +41,7 @@ export default function MeetScene({ targetId }: { targetId: string }) {
   const [phase, setPhase] = useState<Phase>({ kind: "resolving" });
   const [me, setMe] = useState<string | null>(null);
   const [names, setNames] = useState<Names | null>(null);
+  const [looks, setLooks] = useState<CutsceneAppearances>({});
   // Strict Mode runs effects twice in dev; a second POST would log a second attempt.
   const started = useRef<string | null>(null);
 
@@ -76,10 +81,11 @@ export default function MeetScene({ targetId }: { targetId: string }) {
     setMe(fishId);
     (async () => {
       try {
-        const [a, b] = await Promise.all([fetchName(fishId), fetchName(targetId)]);
+        const [a, b] = await Promise.all([fetchFish(fishId), fetchFish(targetId)]);
         if (!b) return setPhase({ kind: "not_found" });
         if (!a) return toOnboarding(); // stale id in localStorage
-        setNames({ a, b });
+        setNames({ a: a.displayName, b: b.displayName });
+        setLooks({ a: a.appearance, b: b.appearance });
         await meet(fishId);
       } catch (err) {
         setPhase({ kind: "error", message: (err as Error).message });
@@ -106,19 +112,23 @@ export default function MeetScene({ targetId }: { targetId: string }) {
     );
 
   const n = names ?? { a: "…", b: "…" };
+  // The meet response carries both looks too (fresh at play time).
+  const playingLooks = phase.kind === "playing" ? { a: phase.meet.fish.a.appearance, b: phase.meet.fish.b.appearance } : looks;
 
   return (
     <div className="meet">
+      <FishArtPreloader sizes="(max-width: 520px) 40vw, 190px" />
       {phase.kind === "playing" ? (
         <CutscenePlayer
           key={phase.meet.attemptNumber}
           script={phase.meet.script}
           names={n}
+          appearances={playingLooks}
           renderEnd={(replay) => <EndScreen meet={phase.meet} onReplay={replay} onRetry={() => me && meet(me)} />}
         />
       ) : (
         <>
-          <CutsceneStage names={n} speaking={null} />
+          <CutsceneStage names={n} appearances={looks} speaking={null} />
           <div className="dialogue" aria-live="polite">
             {phase.kind === "meeting" && <span className="text">{n.b} is swimming over…</span>}
             {phase.kind === "error" && <span className="text error">{phase.message}</span>}

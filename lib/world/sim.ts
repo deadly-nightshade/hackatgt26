@@ -1,19 +1,25 @@
 import type { BumpLine } from "@/lib/meet/schema";
-import { WALKABLE, WORLD, type Area } from "@/lib/world/config";
+import { cancelActivity, chooseActivity, createRuns, assign, freeSlotOf, routeZ, runOf, stepActivities, type ActivityDef, type ActivityRun, type Pose } from "@/lib/world/activities";
+import { DEMO, WALKABLE, WORLD, type Area } from "@/lib/world/config";
+import { planPath, randomFreePoint, segmentClear } from "@/lib/world/paths";
+import type { Pt } from "@/lib/world/scene";
 
 /**
- * Pure wander + bump simulation for /world (no DOM, injectable RNG, sim clock in ms).
+ * Pure wander + bump + activity simulation for /world (no DOM, injectable RNG, sim clock in ms).
  * The React hook owns one SimWorld, calls stepSim every frame and paints the result.
  */
 
-export type FishMode = "walk" | "pause" | "bump" | "approach" | "hold";
+export type FishMode = "walk" | "pause" | "bump" | "approach" | "hold" | "task";
 
 export type SimFish = {
   id: string;
   x: number;
   y: number;
+  /** Final destination of the current walk (debug overlay). */
   tx: number;
   ty: number;
+  /** Remaining waypoints (walk / task). */
+  path: Pt[];
   /** World widths per second. */
   speed: number;
   /** 1 = facing right, -1 = facing left. */
@@ -24,6 +30,14 @@ export type SimFish = {
   /** No random bumps before this (sim ms). */
   cooldownUntil: number;
   bubble: string | null;
+  /** Timed (activity) bubbles clear themselves at this time; 0 = managed by a bump. */
+  bubbleUntil: number;
+  /** Doing an activity: which, which anchor, walking there or at it. */
+  task: { act: string; slot: number; stage: "going" | "there"; since: number; hurry?: boolean } | null;
+  /** Visual pose ("wait" = at an anchor, waiting for the activity to start). */
+  pose: Pose | "wait" | null;
+  /** Draw-order y override (behind a counter front); null = feet y. */
+  zY: number | null;
 };
 
 export type SimBump = {
@@ -36,9 +50,21 @@ export type SimBump = {
 
 export type SimOptions = {
   area: Area;
+  /** Footprints fish never stand in or walk through. */
+  blocked: readonly Area[];
+  activities: readonly ActivityDef[];
   reducedMotion: boolean;
   /** Exchanges for two fish, oriented so `.a` is spoken by the first id. */
   linesFor: (x: string, y: string) => BumpLine[];
+  /** Have these two met (a pair exists)? Used to prefer friends as helpers/partners. */
+  areFriends: (x: string, y: string) => boolean;
+};
+
+export type Tuning = {
+  activityChance: number;
+  /** Global sim-speed multiplier (debug). */
+  timeScale: number;
+  demo: boolean;
 };
 
 export type SimWorld = {
@@ -47,6 +73,14 @@ export type SimWorld = {
   bumps: SimBump[];
   /** "Swim over": my fish is heading to `target`, which holds still. */
   approach: { me: string; target: string } | null;
+  activities: ActivityRun[];
+  /** Queued timed bubbles. */
+  speech: { who: string; text: string; at: number; ms: number }[];
+  /** Activity items currently shown. */
+  items: Record<string, boolean>;
+  /** Sprite id → hop until (sim ms). */
+  hops: Record<string, number>;
+  tuning: Tuning;
   rng: () => number;
   opts: SimOptions;
 };
@@ -62,38 +96,70 @@ export function clampToArea(p: { x: number; y: number }, area: Area) {
   return { x: clamp(p.x, area.minX, area.maxX), y: clamp(p.y, area.minY, area.maxY) };
 }
 
-/** Next wander target: anywhere, or (reduced motion) a small hop nearby. */
-export function wanderTarget(f: Pick<SimFish, "x" | "y">, w: Pick<SimWorld, "rng" | "opts">) {
-  if (!w.opts.reducedMotion) return randomPointIn(w.opts.area, w.rng);
-  const r = WORLD.REDUCED_MOTION.WANDER_RADIUS;
-  return clampToArea({ x: f.x + between(w.rng, [-r, r]), y: f.y + between(w.rng, [-r, r]) }, w.opts.area);
+/**
+ * Next wander target: a free spot the fish can walk to in a straight line
+ * (reduced motion: a small hop nearby). Null if nothing works (stay put).
+ */
+export function wanderTarget(f: Pick<SimFish, "x" | "y">, w: Pick<SimWorld, "rng" | "opts">): Pt | null {
+  const { area, blocked } = w.opts;
+  for (let i = 0; i < 12; i++) {
+    let p: Pt | null;
+    if (w.opts.reducedMotion) {
+      const r = WORLD.REDUCED_MOTION.WANDER_RADIUS;
+      p = clampToArea({ x: f.x + between(w.rng, [-r, r]), y: f.y + between(w.rng, [-r, r]) }, area);
+      if (blocked.some((b) => p!.x >= b.minX && p!.x <= b.maxX && p!.y >= b.minY && p!.y <= b.maxY)) p = null;
+    } else p = randomFreePoint(area, blocked, w.rng);
+    if (p && segmentClear(f, p, blocked)) return p;
+  }
+  return null;
 }
 
-const pauseRange = (w: SimWorld) => (w.opts.reducedMotion ? WORLD.REDUCED_MOTION.PAUSE_MS : WORLD.PAUSE_MS);
+const pauseRange = (w: SimWorld) =>
+  w.opts.reducedMotion ? WORLD.REDUCED_MOTION.PAUSE_MS : w.tuning.demo ? DEMO.PAUSE_MS : WORLD.PAUSE_MS;
 
-/** New world; fish already in `prev` keep their state (e.g. when the resident list refreshes). */
-export function createSim(ids: string[], opts: Partial<SimOptions> & Pick<SimOptions, "linesFor">, rng: () => number = Math.random, prev?: SimWorld): SimWorld {
-  const full: SimOptions = { area: WALKABLE, reducedMotion: false, ...opts };
-  const w: SimWorld = { t: prev?.t ?? 0, fish: [], bumps: [], approach: null, rng, opts: full };
+type CreateOpts = Partial<Omit<SimOptions, "linesFor">> & Pick<SimOptions, "linesFor"> & { demo?: boolean };
+
+/** New world; fish already in `prev` keep their position (e.g. when the resident list refreshes). */
+export function createSim(ids: string[], opts: CreateOpts, rng: () => number = Math.random, prev?: SimWorld): SimWorld {
+  const { demo = false, ...rest } = opts;
+  const full: SimOptions = { area: WALKABLE, blocked: [], activities: [], reducedMotion: false, areFriends: () => false, ...rest };
+  const w: SimWorld = {
+    t: prev?.t ?? 0,
+    fish: [],
+    bumps: [],
+    approach: null,
+    activities: createRuns([...full.activities]),
+    speech: [],
+    items: {},
+    hops: {},
+    tuning: prev?.tuning ?? { activityChance: demo ? DEMO.ACTIVITY_CHANCE : WORLD.ACTIVITY_CHANCE, timeScale: 1, demo },
+    rng,
+    opts: full,
+  };
   const speedFactor = full.reducedMotion ? WORLD.REDUCED_MOTION.SPEED_FACTOR : 1;
   for (const id of ids) {
     const old = prev?.fish.find((f) => f.id === id);
     if (old) {
-      w.fish.push({ ...old, mode: old.mode === "bump" || old.mode === "hold" || old.mode === "approach" ? "pause" : old.mode, bubble: null });
+      w.fish.push({ ...old, mode: "pause", until: w.t, path: [], task: null, pose: null, zY: null, bubble: null, bubbleUntil: 0 });
       continue;
     }
-    const p = randomPointIn(full.area, rng);
+    const p = randomFreePoint(full.area, full.blocked, rng) ?? randomPointIn(full.area, rng);
     w.fish.push({
       id,
       ...p,
       tx: p.x,
       ty: p.y,
+      path: [],
       speed: WORLD.WALK_SPEED * speedFactor * (1 + between(rng, [-WORLD.SPEED_JITTER, WORLD.SPEED_JITTER])),
       facing: rng() < 0.5 ? -1 : 1,
       mode: "pause",
       until: w.t + between(rng, [0, 1500]),
       cooldownUntil: w.t + between(rng, WORLD.SPAWN_COOLDOWN_MS),
       bubble: null,
+      bubbleUntil: 0,
+      task: null,
+      pose: null,
+      zY: null,
     });
   }
   return w;
@@ -105,7 +171,7 @@ export function bumpDistance(a: Pick<SimFish, "x" | "y">, b: Pick<SimFish, "x" |
   return Math.hypot(a.x - b.x, (a.y - b.y) * WORLD.BUMP_Y_WEIGHT);
 }
 
-const isFree = (f: SimFish, t: number) => (f.mode === "walk" || f.mode === "pause") && t >= f.cooldownUntil;
+const isFree = (f: SimFish, t: number) => (f.mode === "walk" || f.mode === "pause") && !f.task && f.zY === null && t >= f.cooldownUntil;
 
 /** Pairs of free fish close enough to bump, up to the concurrency cap. */
 export function findBumps(w: SimWorld): [SimFish, SimFish][] {
@@ -138,6 +204,8 @@ export function startBump(w: SimWorld, a: SimFish, b: SimFish): SimBump {
   for (const f of [a, b]) {
     f.mode = "bump";
     f.bubble = null;
+    f.bubbleUntil = 0;
+    f.path = [];
   }
   a.facing = b.x >= a.x ? 1 : -1;
   b.facing = a.x > b.x ? 1 : -1;
@@ -172,7 +240,13 @@ function cancelBumpsOf(w: SimWorld, id: string) {
   for (const bump of [...w.bumps]) if (bump.a === id || bump.b === id) endBump(w, bump);
 }
 
-/** My fish swims to `targetId`, which stops and waits; on arrival they always bump. */
+/** Cancel the activity this fish is part of (cleanly: items gone, everyone in it freed). */
+function cancelTaskOf(w: SimWorld, f: SimFish) {
+  const r = f.task && runOf(w, f.task.act);
+  if (r) cancelActivity(w, r);
+}
+
+/** My fish swims to `targetId`, which stops and waits; on arrival they always bump. Interrupts activities. */
 export function swimOver(w: SimWorld, meId: string, targetId: string) {
   const me = byId(w, meId);
   const target = byId(w, targetId);
@@ -181,12 +255,17 @@ export function swimOver(w: SimWorld, meId: string, targetId: string) {
     const held = byId(w, w.approach.target);
     if (held && held.mode === "hold") Object.assign(held, { mode: "pause", until: w.t });
   }
-  cancelBumpsOf(w, meId);
-  cancelBumpsOf(w, targetId);
+  for (const f of [me, target]) {
+    cancelBumpsOf(w, f.id);
+    cancelTaskOf(w, f);
+    f.bubble = null;
+    f.bubbleUntil = 0;
+    f.path = [];
+    f.pose = null;
+    f.zY = null;
+  }
   target.mode = "hold";
-  target.bubble = null;
   me.mode = "approach";
-  me.bubble = null;
   w.approach = { me: meId, target: targetId };
 }
 
@@ -206,22 +285,69 @@ function moveToward(f: SimFish, tx: number, ty: number, speed: number, dt: numbe
   return false;
 }
 
-/** Advance the world by dtMs (clamped). */
+/** Walk the waypoint list; true once it's empty. */
+function followPath(f: SimFish, dt: number, speed = f.speed): boolean {
+  let left = dt;
+  while (f.path.length && left > 0) {
+    const [p] = f.path;
+    const d = Math.hypot(p.x - f.x, p.y - f.y);
+    const ms = (d / speed) * 1000;
+    if (moveToward(f, p.x, p.y, speed, left)) {
+      f.path.shift();
+      left -= ms;
+    } else left = 0;
+  }
+  return f.path.length === 0;
+}
+
+/** A pause ended: maybe an activity, else wander somewhere reachable. */
+function moveOn(w: SimWorld, f: SimFish) {
+  if (w.activities.length && w.rng() < w.tuning.activityChance) {
+    const r = chooseActivity(w, f);
+    if (r) {
+      assign(w, r, f, freeSlotOf(r, f));
+      return;
+    }
+  }
+  const next = wanderTarget(f, w);
+  if (!next) {
+    f.until = w.t + between(w.rng, pauseRange(w));
+    return;
+  }
+  f.path = planPath(f, next, w.opts.area, w.opts.blocked);
+  f.mode = "walk";
+}
+
+/** Advance the world by dtMs (clamped per frame, then scaled by tuning.timeScale). */
 export function stepSim(w: SimWorld, dtMs: number) {
-  const dt = Math.min(Math.max(dtMs, 0), WORLD.MAX_DT_MS);
+  const dt = Math.min(Math.max(dtMs, 0), WORLD.MAX_DT_MS) * w.tuning.timeScale;
   w.t += dt;
 
   for (const f of w.fish) {
+    if (f.bubbleUntil && w.t >= f.bubbleUntil) {
+      f.bubble = null;
+      f.bubbleUntil = 0;
+    }
     if (f.mode === "walk") {
-      if (moveToward(f, f.tx, f.ty, f.speed, dt)) {
+      if (followPath(f, dt)) {
         f.mode = "pause";
+        f.zY = null; // walked out of a counter / stall route
         f.until = w.t + between(w.rng, pauseRange(w));
       }
     } else if (f.mode === "pause" && w.t >= f.until) {
-      const next = wanderTarget(f, w);
-      f.tx = next.x;
-      f.ty = next.y;
-      f.mode = "walk";
+      moveOn(w, f);
+    } else if (f.mode === "task") {
+      if (f.task?.stage === "going") {
+        followPath(f, dt, f.task.hurry ? f.speed * WORLD.HELPER_SPEED_FACTOR : f.speed);
+        // Stuck (e.g. unreachable): give up the whole activity.
+        if (w.t - f.task.since > WORLD.ARRIVE_TIMEOUT_MS) cancelTaskOf(w, f);
+      }
+      f.zY = routeZ(w, f);
+    }
+    const last = f.path[f.path.length - 1];
+    if (last) {
+      f.tx = last.x;
+      f.ty = last.y;
     }
   }
 
@@ -234,12 +360,16 @@ export function stepSim(w: SimWorld, dtMs: number) {
     } else {
       const side = me.x <= target.x ? -1 : 1;
       const spot = clampToArea({ x: target.x + side * WORLD.FISH_WIDTH, y: target.y }, w.opts.area);
+      me.tx = spot.x;
+      me.ty = spot.y;
       if (moveToward(me, spot.x, spot.y, WORLD.WALK_SPEED * WORLD.SWIM_OVER_SPEED_FACTOR, dt)) {
         w.approach = null;
         startBump(w, me, target);
       }
     }
   }
+
+  stepActivities(w);
 
   for (const [a, b] of findBumps(w)) startBump(w, a, b);
 
@@ -261,7 +391,7 @@ export function stepSim(w: SimWorld, dtMs: number) {
   }
 }
 
-/** 0..1 depth for drawing order and scale (1 = nearest the viewer). */
+/** 0..1 depth for scale (1 = nearest the viewer). */
 export function depthOf(y: number, area: Area = WALKABLE): number {
   return clamp((y - area.minY) / (area.maxY - area.minY), 0, 1);
 }

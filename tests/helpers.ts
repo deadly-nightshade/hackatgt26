@@ -1,3 +1,4 @@
+import { DEFAULT_APPEARANCE, getAppearance, type Appearance } from "@/lib/fish/appearance";
 import type { MeetAttempt, Pair } from "@/lib/meet/schema";
 import type { Profile } from "@/lib/profile/schema";
 import type { PairRepository } from "@/lib/storage/pairRepo";
@@ -8,7 +9,13 @@ import type { ProfileRepository, StoredProfile } from "@/lib/storage/profileRepo
 export class MemoryProfiles implements ProfileRepository {
   constructor(public map = new Map<string, StoredProfile>()) {}
   add(id: string, profile: Profile, updatedAt = new Date("2026-01-01")) {
-    this.map.set(id, { id, profile, createdAt: updatedAt, updatedAt, isSeed: false });
+    this.map.set(id, { id, profile, createdAt: updatedAt, updatedAt, isSeed: false, appearance: DEFAULT_APPEARANCE });
+  }
+  async setAppearance(id: string, appearance: Appearance) {
+    const p = this.map.get(id);
+    if (!p) return false;
+    this.map.set(id, { ...p, appearance: getAppearance(appearance) });
+    return true;
   }
   async save(): Promise<{ id: string }> {
     throw new Error("unused");

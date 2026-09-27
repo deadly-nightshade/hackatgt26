@@ -24,6 +24,7 @@ With the default `AI_MODE=mock`, the whole flow runs with **zero API calls**: tr
 | `npm test` | Vitest: the Zod schema rejects malformed output; toWav → 16 kHz mono s16 (parses the WAV header) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run extract:fixtures [-- --only rich,messy]` | Runs `extractProfile` on `fixtures/answers/*.json` and checks each result: schema valid, every interest has evidence, and none of the fixture's `mustNotContain` sensitive terms appear. Needs `AI_MODE=live` for real output |
+| `npm run build:scene` | Crops the raw art in `public/art/world/` into the `/world` scene sprites (`public/world/scene/`) and crops the ice cream stand + its counter front. Re-run after replacing art |
 | `npm run seed:fish [-- --for <userId>] [-- --clear]` | Inserts 5 labeled seed fish (`isSeed: true`, ids `seed-1-…` to `seed-5-…`) covering strong overlap, close-only overlap, a bridge only, zero overlap and a near-twin. Idempotent. `--for <userId>` also builds that user a sample `/world`: meets and hangouts at levels 1–4, one stranger, one pair between two residents, all run through the real pipeline with the mock AI (0 model calls). Existing pairs are left alone. `--clear` removes the seeds and their pairs/attempts |
 | `npm run meet:pair -- <idA> <idB> [--attempts N] [--hangouts N] [--ignore-cooldown] [--reset] [--regenerate] [--force friends\|clammed_up]` | Runs the meet pipeline from the terminal and prints the analysis, similarity, pFail/roll and script. Writes to storage like a real tap. `--reset` deletes the pair first |
 | `npm run list:fish [-- <baseUrl>]` | Lists every fish with its id and NFC tag URL (`<baseUrl>/meet/<id>`). Base URL defaults to `PUBLIC_BASE_URL`, then `http://localhost:3000` |
@@ -78,8 +79,11 @@ lib/
   meet/guard.ts, score.ts, roll.ts, templates.ts   pure + unit-tested
   storage/pairRepo.ts       PairRepository + FilePairRepository (data/pairs, data/meet-attempts)
   storage/mongoPairRepo.ts  MongoPairRepository (`pairs`, `meetAttempts`)
-  world/config.ts           every /world tunable: art paths, walkable area, speeds, bump timing
-  world/sim.ts              pure wander/bump/swim-over simulation (unit-tested)
+  world/config.ts           every /world tunable: art paths, walkable area, framing, speeds, bump/activity timing, DEMO
+  world/scene.ts            where every prop/item sits (normalized coords), blocked footprints (see docs/world-assets.md)
+  world/activities.ts       data-driven ambient activities (sandcastle, booths, picnic, seagull, ice cream counter)
+  world/paths.ts            walking around blocked props (shortest route via rect corners)
+  world/sim.ts              pure wander/bump/swim-over/activity simulation (unit-tested)
   world/useWorldSim.ts      the rAF loop: positions in refs, written to the DOM as transforms
   world/server.ts           getResidentsFor() (who appears), world payload, history, replays
   world/bumps.ts            bump-line tidy/fallback/generic bubbles
@@ -117,6 +121,37 @@ Each fish's NFC tag holds `https://<domain>/meet/<userId>`. Tapping a tag opens 
 - **Bumps:** when two fish meet they swap tiny speech bubbles (≤ 4 words). These `bumpLines` are generated inside the existing dialogue call, so there's no extra model call. Older pairs and AI fallbacks use template lines built from their shared interests. Two of your friends with no pair between them say generic things ("blub!", "nice fins").
 - **Cards + history:** tap a fish for its level, friendship date, and the list of past cutscenes. Every attempt now saves the exact script it played, so replays just read it back: they never call `/api/meet`, roll, or change levels. Attempts from before this change say "replay unavailable". There's no meet or retry button here; those only happen by tapping someone's NFC tag.
 - **Try it locally:** `npm run seed:fish -- --for <yourId>`, then `/dev/whoami` → pick yourself → `/world`.
+
+## Living seaside world (Phase 4)
+
+The market is now built from separate layers and props (asset notes and placements: `docs/world-assets.md`), and fish do things there. None of it makes AI calls; it all runs client-side from config.
+
+- **Framing:** the square scene fits the screen width (height on landscape screens, with copies of the base at the sides). Sky blue fills the space above and ocean blue the space below, pixel-matched to the art's edges. `FRAMING.SKY_SHARE` sets how the leftover height splits.
+- **Depth:** fish and props are y-sorted by their base, so fish pass behind stalls and the table. Fish never walk through the blocked footprints in `scene.ts`.
+- **Activities** (`lib/world/activities.ts`): now and then a free fish picks one (`WORLD.ACTIVITY_CHANCE`, weighted), walks to its anchor, and something happens:
+  - **Sandcastle:** the fish calls the nearest free fish (friends preferred). Both dig and a castle appears. It stays 4s after they leave. If nobody comes within 8s, the fish says "aw…".
+  - **Booths 1/2:** a fish stands behind the counter and items show while it's there.
+  - **Picnic table:** needs two fish. The one waiting draws others in. When both sit (drawn over the table), they swap bump lines and ice cream appears.
+  - **Seagull:** fries appear and the gull hops.
+  - **Ice cream counter:** a fish stands in the serving window, behind the stand's counter front.
+
+  "Swim over" cancels whatever the two fish were doing.
+- **Placeholders:** items without art are drawn as dashed boxes. Dropping a PNG at `public/world/props/<item>.png` replaces one, no code change.
+- **`/world?debug=1`** draws the walkable area, blocked rects, zones, anchors and each fish's target. The panel sits behind a tiny ‹ in the bottom-right corner: force any activity, tune the activity chance and time speed, toggle the overlay. **`?demo=1`** (or `NEXT_PUBLIC_WORLD_DEMO=1`) shortens every timing so all interactions show up within about 30s, for recording; with `?debug=1&demo=1` the overlay starts hidden.
+
+## Fish customization (Phase 5)
+
+- **Registry:** `lib/fish/appearance.ts` (shared by client and server) lists the slots and their options. Every accessory PNG is the base's exact size (2048×2330) and already positioned, so a fish is the base plus overlays stacked 1:1 (`LAYER_ORDER`: base → feet → head). To add an option, drop the file in `public/art/fish/<slot>/` and add one config line. The feet slot has no art yet: its arrows are disabled with "coming soon" until it does.
+- **One sprite everywhere:** `<FishSprite appearance …>` (`app/_components/FishSprite.tsx`) renders every fish: the world, popup cards, `/meet`, replays, the creator and `/me`.
+- **Onboarding:** after the last answer, profile extraction starts in the background and the creator shows right away. Arrows around the fish cycle head (top) and feet (bottom); ←/→ and Shift+←/→ work on desktop. **Next** unlocks when the profile is ready, and a failure shows **Retry** without losing the look. The look is kept in sessionStorage and saved with the profile at confirm. In mock mode, extraction waits ~4s so the waiting state can be seen.
+- **`/me`:** the same creator at the top; **Save** calls `PATCH /api/users/:id/appearance`. Owner-only (hackathon level): the request carries the caller's fishId, which must match `:id`.
+- **Pair AI cache is safe:** appearance lives in `appearance` / `appearanceUpdatedAt` and never touches the profile's `updatedAt` (the pair cache key). This is covered by a test.
+- **Existing users:** no migration. A missing or partial `appearance` reads as the plain fish (`getAppearance()`).
+- `npm run seed:fish` gives each seed fish a different head accessory. Existing seeds get only their look updated.
+
+### Identity across browsers
+
+Your fish id lives in the browser, in localStorage plus a long-lived cookie backup. An NFC tap opens the phone's default browser (Safari on iPhone), which may not be where you onboarded: an in-app browser, another browser, the home-screen app, or a different address. When there's no id, the onboarding page now has **"Already made your fish?"**. Type your fish's name, tap it, and you continue to the tag you scanned (`GET /api/users/find?name=`, exact name match, not seeds).
 
 ## Deploy
 
