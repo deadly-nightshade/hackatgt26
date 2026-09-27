@@ -158,3 +158,7 @@ Your fish id lives in the browser, in localStorage plus a long-lived cookie back
 
 - **Vercel:** live transcription works as-is, because the browser connects straight to ElevenLabs. Set `STORAGE=mongo` and leave `WRITABLE_FS` unset. All routes use the Node runtime, and the ffmpeg-static binary is traced into `/api/transcribe` through `outputFileTracingIncludes`. Check that transcription works in a preview deploy early.
 - **VPS:** `DOMAIN=example.com docker compose up -d --build` runs the Next standalone server with system ffmpeg behind Caddy, which handles HTTPS automatically.
+
+
+fih list: npm run list:fish
+npm run remove:fish -- <id-1> <id-2> etc
