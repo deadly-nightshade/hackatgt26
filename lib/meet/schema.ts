@@ -55,7 +55,7 @@ export type BumpLine = z.infer<typeof BumpLineSchema>;
 export const DialogueSchema = z.object({
   friendsLines: z.array(DialogueLineSchema).min(2).max(10),
   clammedUpLines: z.array(DialogueLineSchema).min(2).max(10),
-  bumpLines: z.array(BumpLineSchema).max(12).describe("5-8 tiny exchanges for when they bump into each other on the island"),
+  bumpLines: z.array(BumpLineSchema).max(12).describe("5-8 tiny exchanges for when they bump into each other on the beach"),
 });
 /** Parsing is lenient on bumpLines: bad or missing ones fall back to templates instead of costing a retry. */
 export const DialogueParseSchema = DialogueSchema.extend({

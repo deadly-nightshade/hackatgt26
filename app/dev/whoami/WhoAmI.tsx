@@ -70,7 +70,7 @@ export default function WhoAmI({ users }: { users: User[] }) {
         {me && (
           <>
             {" "}
-            · <Link href="/world">Go to my island →</Link>
+            · <Link href="/world">Go to my beach →</Link>
           </>
         )}
       </p>

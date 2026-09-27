@@ -7,7 +7,7 @@ const lilac = localFont({ src: "./fonts/LILAC.otf", variable: "--font-app", disp
 
 export const metadata: Metadata = {
   title: "Seaside Market — Onboarding",
-  description: "Tell us about yourself and become a resident of the island.",
+  description: "Tell us about yourself and become a resident of the beach.",
 };
 
 export const viewport: Viewport = {

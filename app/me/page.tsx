@@ -98,7 +98,7 @@ export default function MePage() {
     <main className="creator-page">
       <p className="me-back">
         <Link href="/world" onClick={guard}>
-          ← Back to island
+          ← Back to beach
         </Link>
       </p>
       <h1>{profile.displayName} 🐟</h1>
@@ -128,7 +128,7 @@ export default function MePage() {
           </button>
         </div>
         <p className="creator-status" aria-live="polite">
-          {save.kind === "saved" && !changed && "Saved! Your fish is showing off its new look on the island. ✨"}
+          {save.kind === "saved" && !changed && "Saved! Your fish is showing off its new look on the beach. ✨"}
           {save.kind === "error" && <span className="error">{save.message}</span>}
         </p>
       </section>
@@ -189,7 +189,7 @@ export default function MePage() {
       </section>
       <p>
         <Link href="/world" onClick={guard}>
-          Back to island
+          Back to beach
         </Link>{" "}
         ·{" "}
         <Link href="/onboarding" onClick={guard}>

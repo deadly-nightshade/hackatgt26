@@ -39,13 +39,13 @@ export default function World() {
       .then(async (res) => {
         if (res.status === 404) return toOnboarding(); // stale id in localStorage
         const json = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json.error || `Couldn't load the island (${res.status})`);
+        if (!res.ok) throw new Error(json.error || `Couldn't load the beach (${res.status})`);
         setLoad({ kind: "ready", world: json as WorldResponse });
       })
       .catch((err: Error) => setLoad({ kind: "error", message: err.message }));
   }, [router]);
 
-  if (load.kind === "loading") return <main className="meet-shell"><p className="muted">Swimming to the island…</p></main>;
+  if (load.kind === "loading") return <main className="meet-shell"><p className="muted">Swimming to the beach…</p></main>;
   if (load.kind === "error")
     return (
       <main className="meet-shell">
@@ -97,7 +97,7 @@ function Island({ world }: { world: WorldResponse }) {
   return (
     <div className="world-page" style={vars}>
       <header className="world-header">
-        <span className="world-title">🏝️ {me.displayName}&apos;s island</span>
+        <span className="world-title">🏖️ {me.displayName}&apos;s beach</span>
         <Link className="world-profile-btn" href="/me" aria-label="My profile">
           🐟 Me
         </Link>

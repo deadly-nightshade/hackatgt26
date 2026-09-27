@@ -81,7 +81,7 @@ export const DIALOGUE_SYSTEM_PROMPT = `You write the middle of a short friend-ma
 Write TWO variants:
 - friendsLines (${MIDDLE_LINES.min}-${MIDDLE_LINES.max} lines): they chat happily about their REAL overlaps (use the connections given, especially the spotlight and any bridge).
 - clammedUpLines (${MIDDLE_LINES.min}-${MIDDLE_LINES.max} lines): shy and awkward, a few near-misses, but still touching on the spotlight connection, ending on a hopeful note.
-Also write bumpLines (${BUMP_LINES.min}-${BUMP_LINES.max} items): tiny speech-bubble exchanges for when these two fish bump into each other while wandering the island. a = fish a's bubble, b = fish b's reply. Each side AT MOST ${BUMP_MAX_WORDS} WORDS, lowercase-casual, about their real overlaps, one emoji allowed, no names at all. Examples: { "a": "honkai star rail?", "b": "gaming!!" }, { "a": "skewers later?", "b": "always 🍢" }.
+Also write bumpLines (${BUMP_LINES.min}-${BUMP_LINES.max} items): tiny speech-bubble exchanges for when these two fish bump into each other while wandering the beach. a = fish a's bubble, b = fish b's reply. Each side AT MOST ${BUMP_MAX_WORDS} WORDS, lowercase-casual, about their real overlaps, one emoji allowed, no names at all. Examples: { "a": "honkai star rail?", "b": "gaming!!" }, { "a": "skewers later?", "b": "always 🍢" }.
 
 ${DIALOGUE_STYLE}
 

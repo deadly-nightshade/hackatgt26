@@ -98,7 +98,7 @@ export default function MeetScene({ targetId }: { targetId: string }) {
       <Shell>
         <h1>That&apos;s your own tag, silly fish! 🐟</h1>
         <p>Tap a friend&apos;s tag to meet them.</p>
-        <Link href="/world">Back to island</Link>
+        <Link href="/world">Back to beach</Link>
       </Shell>
     );
   if (phase.kind === "not_found")
@@ -106,7 +106,7 @@ export default function MeetScene({ targetId }: { targetId: string }) {
       <Shell>
         <h1>Hmm, no fish here 🫧</h1>
         <p>This tag doesn&apos;t belong to any resident (yet). Maybe they haven&apos;t finished onboarding?</p>
-        <Link href="/world">Back to island</Link>
+        <Link href="/world">Back to beach</Link>
       </Shell>
     );
 
@@ -144,7 +144,7 @@ export default function MeetScene({ targetId }: { targetId: string }) {
         <div className="meet-actions">
           <p className="muted">Tap their tag again to try again 🌊</p>
           <Link className="button secondary" href="/world">
-            Back to island
+            Back to beach
           </Link>
         </div>
       )}
@@ -172,7 +172,7 @@ function EndScreen({ meet, onReplay }: { meet: MeetResponse; onReplay: () => voi
         {/* No "try again": a new meet only happens by tapping their tag again (which then always works). */}
         <button onClick={onReplay}>Replay</button>
         <Link className="button secondary" href="/world">
-          Back to island
+          Back to beach
         </Link>
       </div>
     </div>

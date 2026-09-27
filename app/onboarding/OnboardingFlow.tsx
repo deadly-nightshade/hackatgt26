@@ -267,7 +267,7 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
         {existing ? (
           <p>Answer the questions again and we&apos;ll refresh your profile. Your friends, levels and look all stay.</p>
         ) : (
-          <p>Answer a few quick questions out loud (or type) and we&apos;ll turn you into an island resident.</p>
+          <p>Answer a few quick questions out loud (or type) and we&apos;ll turn you into a beach resident.</p>
         )}
         <label htmlFor="name">What should your friends call you?</label>
         <input id="name" value={displayName} maxLength={60} onChange={(e) => setDisplayName(e.target.value)} />
@@ -418,7 +418,7 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
 
   return (
     <main>
-      <h1>Welcome to the island, {profile?.displayName} 🏝️</h1>
+      <h1>Welcome to the beach, {profile?.displayName} 🏖️</h1>
       <p>
         {existing ? "Your profile is updated, and your friends are all still here." : "Your resident profile is saved."}
         {returnTo ? " Taking you back…" : ""}
@@ -429,7 +429,7 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
       {!returnTo && (
         <p>
           <Link className="button" href="/world">
-            Go to your island →
+            Go to your beach →
           </Link>
         </p>
       )}

@@ -2,7 +2,7 @@ import { getQuestion } from "@/lib/onboarding/questions";
 import { TONE_RULES } from "@/lib/ai/tone";
 import type { Answer } from "@/lib/profile/schema";
 
-export const EXTRACTION_SYSTEM_PROMPT = `You build a friendly "resident profile" for a social app set on a seaside market island, where every friend is a resident. The profile will later be used to find common ground between real friends and suggest IRL hangouts.
+export const EXTRACTION_SYSTEM_PROMPT = `You build a friendly "resident profile" for a social app set on a seaside market beach, where every friend is a resident. The profile will later be used to find common ground between real friends and suggest IRL hangouts.
 
 You receive a person's spoken answers to onboarding questions. They are raw speech-to-text transcripts:
 - Expect filler ("um", "like", "idk"), run-on sentences, self-corrections ("wait no, I mean...") and occasional mis-hearings. When someone corrects themselves, use the corrected version.
