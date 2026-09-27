@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CutscenePlayer, CutsceneStage, type CutsceneAppearances } from "@/app/_components/Cutscene";
 import { FishArtPreloader } from "@/app/_components/FishSprite";
+import { LoadingDots } from "@/app/_components/LoadingDots";
 import type { Appearance } from "@/lib/fish/appearance";
 import { getFishId } from "@/lib/meet/identity";
 import type { MeetResponse } from "@/lib/meet/schema";
@@ -30,16 +31,15 @@ async function fetchFish(id: string): Promise<PublicFish | null> {
 
 const END_TEXT: Record<MeetResponse["outcome"], string> = {
   friends: "You made a new friend! 🐟",
-  clammed_up: "They clammed up this time… 🐚",
+  clammed_up: "They clammed up this time… Tap their tag again in a while to try again 🐚",
   already_friends: "Already reel friends! 🐟",
   hangout: "What a fin-tastic hangout! 🌊",
-  cooldown: "You two just hung out. Sea you later! 🌊",
+  cooldown: "You two just hung out. Sea you later! 🌊", // friends; strangers get STILL_SHY
 };
 
 export default function MeetScene({ targetId }: { targetId: string }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "resolving" });
-  const [me, setMe] = useState<string | null>(null);
   const [names, setNames] = useState<Names | null>(null);
   const [looks, setLooks] = useState<CutsceneAppearances>({});
   // Strict Mode runs effects twice in dev; a second POST would log a second attempt.
@@ -78,7 +78,6 @@ export default function MeetScene({ targetId }: { targetId: string }) {
     const toOnboarding = () => router.replace(`/onboarding?returnTo=${encodeURIComponent(`/meet/${targetId}`)}`);
     if (!fishId) return toOnboarding();
     if (fishId === targetId) return setPhase({ kind: "self" });
-    setMe(fishId);
     (async () => {
       try {
         const [a, b] = await Promise.all([fetchFish(fishId), fetchFish(targetId)]);
@@ -124,20 +123,29 @@ export default function MeetScene({ targetId }: { targetId: string }) {
           script={phase.meet.script}
           names={n}
           appearances={playingLooks}
-          renderEnd={(replay) => <EndScreen meet={phase.meet} onReplay={replay} onRetry={() => me && meet(me)} />}
+          renderEnd={(replay) => <EndScreen meet={phase.meet} onReplay={replay} />}
         />
       ) : (
         <>
           <CutsceneStage names={n} appearances={looks} speaking={null} />
           <div className="dialogue" aria-live="polite">
-            {phase.kind === "meeting" && <span className="text">{n.b} is swimming over…</span>}
+            {phase.kind === "meeting" && (
+              // Keeps "typing" until the AI's script arrives.
+              <span className="text" aria-label={`${n.b} is swimming over…`}>
+                {n.b} is swimming over
+                <LoadingDots />
+              </span>
+            )}
             {phase.kind === "error" && <span className="text error">{phase.message}</span>}
           </div>
         </>
       )}
-      {phase.kind === "error" && me && (
+      {phase.kind === "error" && (
         <div className="meet-actions">
-          <button onClick={() => meet(me)}>Try again</button>
+          <p className="muted">Tap their tag again to try again 🌊</p>
+          <Link className="button secondary" href="/world">
+            Back to island
+          </Link>
         </div>
       )}
     </div>
@@ -148,10 +156,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <main className="meet-shell">{children}</main>;
 }
 
-function EndScreen({ meet, onReplay, onRetry }: { meet: MeetResponse; onReplay: () => void; onRetry: () => void }) {
+/** Strangers re-tapping too soon after a clammed-up meet (the server didn't roll again). */
+const STILL_SHY = "Still a bit shy… Tap their tag again in a while 🐚";
+
+function EndScreen({ meet, onReplay }: { meet: MeetResponse; onReplay: () => void }) {
+  const text = meet.outcome === "cooldown" && !meet.levelName ? STILL_SHY : END_TEXT[meet.outcome];
   return (
     <div className="dialogue end">
-      <span className="text">{END_TEXT[meet.outcome]}</span>
+      <span className="text">{text}</span>
       {meet.levelName && (
         <span className="muted">
           {meet.leveledUp && <strong>Level up! </strong>}
@@ -160,11 +172,8 @@ function EndScreen({ meet, onReplay, onRetry }: { meet: MeetResponse; onReplay: 
         </span>
       )}
       <div className="meet-actions">
-        {meet.outcome === "clammed_up" ? (
-          <button onClick={onRetry}>Try again</button>
-        ) : (
-          <button onClick={onReplay}>Replay</button>
-        )}
+        {/* No "try again": a new meet only happens by tapping their tag again (after a while). */}
+        <button onClick={onReplay}>Replay</button>
         <Link className="button secondary" href="/world">
           Back to island
         </Link>

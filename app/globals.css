@@ -177,7 +177,8 @@ a.button.secondary { color: #1f6f8b; }
 @keyframes dig { from { transform: rotate(-7deg) translateY(0); } to { transform: rotate(6deg) translateY(4%); } }
 @keyframes sway { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
 @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-5%); } }
-.wfish.stranger .wfish-body { opacity: .6; }
+/* Met but clammed up ("just met"): greyed out until a later tap makes them friends. */
+.wfish.stranger .wfish-body { filter: grayscale(1) brightness(1.05); opacity: .75; }
 /* Name + bubble: a separate layer above every prop, moved to the fish's head each frame. */
 .wtag { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 40000; pointer-events: none; will-change: transform; }
 .wtag:not([data-ready]) { visibility: hidden; }
@@ -222,7 +223,7 @@ a.button.secondary { color: #1f6f8b; }
 }
 .fish-card-head { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
 .fish-card-sprite { flex: 0 0 72px; }
-.fish-card-sprite.stranger { opacity: .6; }
+.fish-card-sprite.stranger { filter: grayscale(1) brightness(1.05); opacity: .75; }
 .fish-card .level { font-size: 1rem; }
 .fish-card .hint { background: #eaf5f8; border-radius: 10px; padding: 8px 12px; }
 .fish-card h3 { font-size: 1rem; margin: 16px 0 6px; }
@@ -333,3 +334,6 @@ h1, h2, h3, h4, h5, h6, b, strong, th, legend,
 .wfish-name, .swim-btn, .creator-arrow, .creator-status.ready {
   -webkit-text-stroke: var(--fake-bold) currentColor;
 }
+
+/* Typing dots for "still working" text: fixed width so the line doesn't jiggle. */
+.loading-dots { display: inline-block; width: 1.4em; text-align: left; }

@@ -183,3 +183,39 @@ describe("appearance in API payloads", () => {
     expect(replay.appearances).toEqual({ a: DEFAULT_APPEARANCE, b: { version: 1, head: "head-shades", feet: "feet-boots" } });
   });
 });
+
+describe("clammed up → no instant retry", () => {
+  it("a re-tap within the wait gets a 'still shy' scene (no roll, no AI); after it, a real roll", async () => {
+    const profiles = new MemoryProfiles();
+    profiles.add("ann", { ...base, displayName: "Ann" });
+    profiles.add("ben", { ...base, displayName: "Ben" });
+    const pairs = new MemoryPairs();
+    let aiCalls = 0;
+    const mock = new MockMeetAI();
+    const ai: MeetAI = {
+      model: mock.model,
+      analyze: (...a) => (aiCalls++, mock.analyze(...a)),
+      dialogue: (...a) => (aiCalls++, mock.dialogue(...a)),
+      scenes: (...a) => (aiCalls++, mock.scenes(...a)),
+    };
+    const WAIT = 5 * 60_000;
+    let clock = new Date("2026-09-20T12:00:00Z").getTime();
+    const tap = (forced: "friends" | "clammed_up") => {
+      const deps: MeetDeps = { profiles, pairs, ai, random: () => 0.5, now: () => new Date(clock), forcedOutcome: forced, strangerRetryMs: WAIT };
+      return runMeet({ initiatorId: "ann", targetId: "ben" }, deps);
+    };
+
+    expect((await tap("clammed_up")).outcome).toBe("clammed_up");
+    const calls = aiCalls;
+    clock += 60_000; // 1 minute later: too soon, even if it would succeed
+    const soon = await tap("friends");
+    expect(soon.outcome).toBe("cooldown");
+    expect(soon.script[0].text).toMatch(/still feeling a little shy/);
+    expect(aiCalls).toBe(calls);
+    expect((await pairs.getPair("ann__ben"))!.status).toBe("strangers");
+
+    clock += WAIT; // after the wait: a real roll
+    expect((await tap("friends")).outcome).toBe("friends");
+    expect((await pairs.getPair("ann__ben"))!.status).toBe("friends");
+  });
+});

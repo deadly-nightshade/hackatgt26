@@ -40,6 +40,8 @@ export type MeetDeps = {
   forcedOutcome?: ForcedOutcome | null;
   hangoutsEnabled?: boolean;
   cooldownMs?: number;
+  /** Strangers' wait after a clammed-up meet (default meetConfig.strangerRetryMs()). */
+  strangerRetryMs?: number;
 };
 
 export type MeetInput = {
@@ -225,6 +227,16 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
     return runHangout({ deps, input, pair, A, B, analysis, similarity, now, scriptInput, respond });
   }
 
+  // 2b. Clammed up recently → no new roll until they tap again after a while (no AI, not a real attempt).
+  if (existing && pair.status === "strangers" && !input.ignoreCooldown) {
+    const retryMs = deps.strangerRetryMs ?? meetConfig.strangerRetryMs();
+    const lastFail = Math.max(0, ...attempts.filter((a) => a.outcome === "clammed_up").map((a) => a.createdAt.getTime()));
+    if (lastFail && now.getTime() - lastFail < retryMs) {
+      const analysis = pair.analysis ?? fallbackContent(A, B).analysis;
+      return respond({ outcome: "cooldown", script: stillShyScript(names.b), similarity: pair.similarity ?? scoreAnalysis(analysis), analysis });
+    }
+  }
+
   // 3–8. Get or create the cached content.
   let content: Content;
   const regenerate = !!input.regenerate;
@@ -285,6 +297,11 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
     usedFallback: content.usedFallback,
     leveledUp: outcome === "friends" && hangouts,
   });
+}
+
+/** A too-soon re-tap after clammed up: one narrator line (logged as a hidden "cooldown" attempt). */
+function stillShyScript(targetName: string): DialogueLine[] {
+  return [{ speaker: "narrator", text: `${targetName} is still feeling a little shy… Try tapping their tag again in a while! 🐚`, mood: "shy" }];
 }
 
 /** Stretch: a re-tap between friends = a hangout (or a cooldown line). */

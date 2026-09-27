@@ -31,7 +31,7 @@ export const QUESTIONS: OnboardingQuestion[] = [
   {
     id: "feed",
     prompt:
-      "Open whatever app you scroll most. What's actually on your feed right now? Be honest — the 2am stuff counts.",
+      "Think about whatever app you scroll most. What's usually on the feed?",
     purpose: "current interests, niche obsessions, humor/aesthetic",
     followUpHint: "Ask for a specific creator, niche, or the last thing that made them laugh or rabbit-hole.",
     audioSrc: audio("feed"),

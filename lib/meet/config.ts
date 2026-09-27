@@ -75,6 +75,15 @@ export const meetConfig = {
     const v = (process.env.MEET_HANGOUTS ?? "true").toLowerCase();
     return !["0", "false", "no", "off"].includes(v);
   },
+  /**
+   * After a clammed-up meet, strangers must wait this long before a re-tap rolls again
+   * (a re-tap / page reload sooner just gets a "still shy" scene). STRANGER_RETRY_MINUTES, default 5.
+   */
+  strangerRetryMs(): number {
+    const raw = Number(process.env.STRANGER_RETRY_MINUTES);
+    const minutes = Number.isFinite(raw) && raw >= 0 && process.env.STRANGER_RETRY_MINUTES ? raw : 5;
+    return minutes * 60_000;
+  },
   hangoutCooldownMs(): number {
     const raw = Number(process.env.HANGOUT_COOLDOWN_MINUTES);
     const minutes = Number.isFinite(raw) && raw >= 0 && process.env.HANGOUT_COOLDOWN_MINUTES ? raw : 60;

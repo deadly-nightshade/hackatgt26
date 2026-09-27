@@ -85,6 +85,7 @@ function setup(opts: { ai?: CountingAI; forced?: "friends" | "clammed_up" | null
     forcedOutcome: opts.forced === undefined ? null : opts.forced,
     hangoutsEnabled: opts.hangouts ?? false,
     cooldownMs: opts.cooldownMs ?? 60 * 60_000,
+    strangerRetryMs: 0, // these tests re-tap strangers back to back; the wait has its own test
   };
   const tick = (ms: number) => (clock += ms);
   const tap = (from = "alice", to = "bob", extra: { ignoreCooldown?: boolean } = {}) =>

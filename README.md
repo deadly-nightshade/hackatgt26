@@ -52,6 +52,7 @@ See [.env.example](.env.example). Summary:
 | `ENABLE_WHOAMI` | Turns on `/dev/whoami` in production (lists every fish and lets anyone switch identity). Always on in dev |
 | `MEET_HANGOUTS` | Re-taps between friends become hangouts that level up (default `true`). `false` → always "already friends" |
 | `HANGOUT_COOLDOWN_MINUTES` | Minimum time between hangouts (default 60; use 1 for a demo) |
+| `STRANGER_RETRY_MINUTES` | After a clammed-up meet, how long before a re-tap rolls again (default 5). Sooner re-taps or page reloads get a "still shy" scene with no AI call. There is no "Try again" button: retries only happen by tapping the tag again |
 
 ## Layout
 
