@@ -145,6 +145,17 @@ a.button.secondary { color: #1f6f8b; }
 .wstrip.on .wsheet { animation-name: sheet; animation-fill-mode: forwards; animation-iteration-count: 1; }
 @keyframes sheet { from { background-position: 0 0; } to { background-position: 100% 0; } }
 .wsprite.gone { visibility: hidden; }
+/* The crab: an occasional little sideways scuttle, then back. */
+.wsprite[data-scuttles] img { animation: scuttle 11s ease-in-out infinite; }
+@keyframes scuttle {
+  0%, 70%, 100% { transform: translateX(0); }
+  74% { transform: translateX(28%) rotate(-3deg); }
+  78% { transform: translateX(55%); }
+  84% { transform: translateX(55%); }
+  88% { transform: translateX(25%) rotate(3deg); }
+  92% { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) { .wsprite[data-scuttles] img { animation: none; } }
 @keyframes idle-hop { 0%, 88%, 100% { transform: none; } 91% { transform: translateY(-10%); } 94% { transform: scaleX(-1); } 97% { transform: scaleX(-1) translateY(-6%); } }
 
 .wfish {

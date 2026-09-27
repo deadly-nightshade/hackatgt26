@@ -112,6 +112,12 @@ async function main() {
   await cropProp("Bucket and shovel.png", "bucket-shovel.png");
   await cropProp("Sandcastle.png", "sandcastle.png");
   await cropProp("Seagull.png", "seagull.png");
+  await cropProp("Booth1 items.png", "booth1-items.png");
+  await cropProp("Booth2 Items.png", "booth2-items.png");
+  await cropProp("Crab.png", "crab.png");
+  await cropProp("Vanilla.png", "icecream-vanilla.png");
+  await cropProp("Chocolate_.png", "icecream-chocolate.png");
+  await cropProp("Strawberry.png", "icecream-strawberry.png");
   await cropStore();
   // Stall counters (table top + front box): drawn over a fish working the stall.
   for (const id of ["booth1", "booth2"] as const) {

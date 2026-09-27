@@ -131,7 +131,7 @@ The market is now built from separate layers and props (asset notes and placemen
 - **Activities** (`lib/world/activities.ts`): now and then a free fish picks one (`WORLD.ACTIVITY_CHANCE`, weighted), walks to its anchor, and something happens:
   - **Sandcastle:** the fish calls the nearest free fish (friends preferred). Both dig and a castle appears. It stays 4s after they leave. If nobody comes within 8s, the fish says "aw…".
   - **Booths 1/2:** a fish stands behind the counter and items show while it's there.
-  - **Picnic table:** needs two fish. The one waiting draws others in. When both sit (drawn over the table), they swap bump lines and ice cream appears.
+  - **Picnic table:** needs two fish. The one waiting draws others in. When both sit (drawn over the table), they swap bump lines and each gets a random-flavour cone (vanilla, chocolate or strawberry).
   - **Seagull:** the gull swaps to its fries-eating animation (`seagull_anim/`, 9 frames), plays it once, then the idle hopping gull comes back.
   - **Ice cream counter:** a fish stands in the serving window, behind the stand's counter front.
 
@@ -141,12 +141,12 @@ The market is now built from separate layers and props (asset notes and placemen
 
 ## Fish customization (Phase 5)
 
-- **Registry:** `lib/fish/appearance.ts` (shared by client and server) lists the slots and their options. Every accessory PNG is the base's exact size (2048×2330) and already positioned, so a fish is the base plus overlays stacked 1:1 (`LAYER_ORDER`: base → feet → head). To add an option, drop the file in `public/art/fish/<slot>/` and add one config line. The feet slot has no art yet: its arrows are disabled with "coming soon" until it does.
+- **Registry:** `lib/fish/appearance.ts` (shared by client and server) lists the slots and their options. Every accessory PNG is the base's exact size (2048×2330) and already positioned, so a fish is the base plus overlays stacked 1:1 (`LAYER_ORDER`: base → feet → head). To add an option, drop the file in `public/art/fish/<slot>/` and add one config line. Head has "None" + 5 hats; feet has 5 options and no "None", because the base sprite has no feet of its own, so it defaults to Cozy Boots. A slot with a single option shows its arrows disabled with "coming soon".
 - **One sprite everywhere:** `<FishSprite appearance …>` (`app/_components/FishSprite.tsx`) renders every fish: the world, popup cards, `/meet`, replays, the creator and `/me`.
 - **Onboarding:** after the last answer, profile extraction starts in the background and the creator shows right away. Arrows around the fish cycle head (top) and feet (bottom); ←/→ and Shift+←/→ work on desktop. **Next** unlocks when the profile is ready, and a failure shows **Retry** without losing the look. The look is kept in sessionStorage and saved with the profile at confirm. In mock mode, extraction waits ~4s so the waiting state can be seen.
 - **`/me`:** the same creator at the top; **Save** calls `PATCH /api/users/:id/appearance`. Owner-only (hackathon level): the request carries the caller's fishId, which must match `:id`.
 - **Pair AI cache is safe:** appearance lives in `appearance` / `appearanceUpdatedAt` and never touches the profile's `updatedAt` (the pair cache key). This is covered by a test.
-- **Existing users:** no migration. A missing or partial `appearance` reads as the plain fish (`getAppearance()`).
+- **Existing users:** no migration. A missing, partial or unknown slot reads as that slot's default (no hat, boots) via `getAppearance()`, so they look as before.
 - `npm run seed:fish` gives each seed fish a different head accessory. Existing seeds get only their look updated.
 
 ### Identity across browsers

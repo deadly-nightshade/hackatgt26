@@ -1,6 +1,6 @@
 import { DEMO, WORLD, type Area } from "@/lib/world/config";
 import { planPath } from "@/lib/world/paths";
-import { BOOTH1, BOOTH2, BUCKET, COUNTER, PICNIC, SANDCASTLE, SEAGULL, SEAGULL_ANIM, SEAGULL_ANIM_MS, STALL_GAP, STORE, STORE_WINDOW_X, Z_STALL_WORKER, type Pt } from "@/lib/world/scene";
+import { BOOTH1, BOOTH2, BUCKET, COUNTER, PICNIC, SANDCASTLE, SEAGULL, SEAGULL_ANIM, SEAGULL_ANIM_MS, STALL_GAP, STORE, STORE_WINDOW_X, Z_STALL_WORKER, ICE_CREAM_FLAVOURS, iceCreamId, type Pt } from "@/lib/world/scene";
 import type { SimFish, SimWorld } from "@/lib/world/sim";
 
 /**
@@ -30,6 +30,8 @@ export type ActivityDef = {
   triggerAfterMs: number;
   effect: {
     itemIds: string[];
+    /** Each group shows ONE random item per run (e.g. a random ice cream flavour per side). */
+    oneOf?: string[][];
     mode: "whileOccupied" | "persistAfter";
     /** persistAfter: items stay this long after the fish leave. */
     persistMs?: number;
@@ -135,7 +137,13 @@ export const ACTIVITIES: ActivityDef[] = [
     chat: true,
     dwellMs: [7000, 9000],
     triggerAfterMs: 2500,
-    effect: { itemIds: ["icecream"], mode: "whileOccupied", lingerMs: 1200 },
+    // A random-flavour cone in front of each seated fish.
+    effect: {
+      itemIds: [],
+      oneOf: (["left", "right"] as const).map((side) => ICE_CREAM_FLAVOURS.map((f) => iceCreamId(side, f))),
+      mode: "whileOccupied",
+      lingerMs: 1200,
+    },
     cooldownMs: 12000,
     weight: 2,
     pose: "sit",
@@ -191,6 +199,8 @@ export type ActivityRun = {
   cooldownUntil: number;
   /** Completed runs (demo mode boosts untried ones). */
   done: number;
+  /** This run's picks from effect.oneOf. */
+  chosen: string[];
 };
 
 export function createRuns(defs: ActivityDef[]): ActivityRun[] {
@@ -207,6 +217,7 @@ export function createRuns(defs: ActivityDef[]): ActivityRun[] {
     itemsOffAt: 0,
     cooldownUntil: 0,
     done: 0,
+    chosen: [],
   }));
 }
 
@@ -412,6 +423,7 @@ export function stepActivities(w: SimWorld) {
     else if (r.phase === "active") {
       if (!r.itemsOn && r.effectAt <= w.t && r.itemsOffAt < r.effectAt) {
         r.itemsOn = true;
+        r.chosen = (r.def.effect.oneOf ?? []).map((group) => pick(w.rng, group));
         r.itemsOffAt = r.def.effect.maxOnMs ? w.t + r.def.effect.maxOnMs : Infinity;
         for (const id of r.def.effect.hop ?? []) w.hops[id] = w.t + 700;
       }
@@ -446,7 +458,7 @@ export function stepActivities(w: SimWorld) {
   w.speech = w.speech.filter((s) => s.at > w.t);
 
   w.items = {};
-  for (const r of w.activities) if (r.itemsOn) for (const id of r.def.effect.itemIds) w.items[id] = true;
+  for (const r of w.activities) if (r.itemsOn) for (const id of [...r.def.effect.itemIds, ...r.chosen]) w.items[id] = true;
 }
 
 /**

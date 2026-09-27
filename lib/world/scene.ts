@@ -62,6 +62,8 @@ export type SceneSprite = {
   item?: boolean;
   /** Decorations that do an idle/triggered hop (the seagull). */
   hops?: boolean;
+  /** Idle sideways scuttle (the crab). */
+  scuttles?: boolean;
   /** Hidden while this item is shown (the static seagull while its animation plays). */
   hideWhile?: string;
   /** `src` is a horizontal strip of this many frames, played once (at fps) each time the item shows. */
@@ -78,13 +80,6 @@ function place(x: number, y: number, w: number, h: number, scale = 1): Area {
 /** Area from raw-canvas pixels (for things that keep their painted position). */
 const pxRect = (l: number, t: number, w: number, h: number): Area => ({ minX: S(l), minY: S(t), maxX: S(l + w), maxY: S(t + h) });
 
-/** Normalized rect from centre + size in raw-canvas px. */
-const around = (cx: number, cy: number, w: number, h: number): Area => ({
-  minX: cx - S(w / 2),
-  minY: cy - S(h / 2),
-  maxX: cx + S(w / 2),
-  maxY: cy + S(h / 2),
-});
 
 // Cropped art sizes (px) — printed by `npm run build:scene`.
 const ART = {
@@ -94,11 +89,14 @@ const ART = {
   picnic: [766, 568],
   bucket: [279, 180],
   sandcastle: [251, 151],
+  booth1Items: [465, 103],
+  booth2Items: [331, 119],
+  crab: [113, 66],
+  cone: { vanilla: [79, 128], chocolate: [79, 130], strawberry: [79, 123] },
   seagull: [199, 150],
 } as const;
 
 const DIR = "/world/scene";
-const PROPS_DIR = "/world/props";
 
 /** Flattened sky band + sand + dock + seashells (full scene, no alpha). */
 export const SCENE_BASE = { src: `${DIR}/base.jpg`, strip: `${DIR}/strip.jpg` } as const;
@@ -121,12 +119,32 @@ export const Z_STALL_WORKER = -0.004;
 export const Z_STALL_COUNTER = -0.003;
 const counterRect = (booth: Area, [w, h]: readonly [number, number], top: number, scale = 1) =>
   place(booth.minX, booth.minY + S(top * scale), w, h - top, scale);
+/** `Booth1 items.png` is drawn in place on the raw Booth 1 canvas: its bounds start this far into Booth1.png's (px). */
+export const BOOTH1_ITEMS_OFFSET = { x: 1155 - 1027, y: 843 - 634 } as const;
+export const BOOTH1_ITEMS = place(
+  BOOTH1.minX + S(BOOTH1_ITEMS_OFFSET.x * BOOTH1_SCALE),
+  BOOTH1.minY + S(BOOTH1_ITEMS_OFFSET.y * BOOTH1_SCALE),
+  ...ART.booth1Items,
+  BOOTH1_SCALE,
+);
+/** Same for `Booth2 Items.png` inside Booth2.png (scale 1). */
+export const BOOTH2_ITEMS_OFFSET = { x: 1085 - 984, y: 631 - 434 } as const;
+export const BOOTH2_ITEMS = place(BOOTH2.minX + S(BOOTH2_ITEMS_OFFSET.x), BOOTH2.minY + S(BOOTH2_ITEMS_OFFSET.y), ...ART.booth2Items);
 export const BOOTH1_COUNTER = counterRect(BOOTH1, ART.booth1, BOOTH_COUNTER.booth1.top, BOOTH1_SCALE);
 export const BOOTH2_COUNTER = counterRect(BOOTH2, ART.booth2, BOOTH_COUNTER.booth2.top);
 export const PICNIC = place(0.576, 0.303, ...ART.picnic);
 export const BUCKET = place(0.708, 0.684, ...ART.bucket);
 export const SANDCASTLE = place(0.552, 0.696, ...ART.sandcastle);
 export const SEAGULL = place(0.161, 0.566, ...ART.seagull);
+/** On open sand, clear of the seagull's fries and the fish that visits it. */
+export const CRAB = place(0.33, 0.735, ...ART.crab);
+
+/** Ice cream flavours (one random cone per seated fish at the picnic table). */
+export const ICE_CREAM_FLAVOURS = ["vanilla", "chocolate", "strawberry"] as const;
+/** Cone spots on the table top, in front of each bench (feet on the table's front lip). */
+const CONE_SPOTS = { left: { x: 0.722, y: 0.459 }, right: { x: 0.842, y: 0.459 } } as const;
+const cone = (spot: { x: number; y: number }, [w, h]: readonly [number, number]) => place(spot.x - S(w / 2), spot.y - S(h), w, h);
+export const iceCreamId = (side: keyof typeof CONE_SPOTS, flavour: (typeof ICE_CREAM_FLAVOURS)[number]) => `icecream-${side}-${flavour}`;
 const A = SEAGULL_ANIM_ART;
 export const SEAGULL_ANIM = place(
   SEAGULL.minX + S(A.crop.left + A.offset.x - A.staticOrigin.left),
@@ -162,10 +180,24 @@ export const SPRITES: SceneSprite[] = [
   // ── spawnable items (hidden until an activity shows them) ──
   { id: "sandcastle", label: "sandcastle", src: [`${DIR}/sandcastle.png`], rect: SANDCASTLE, layer: "sort", item: true },
   // Booth items sit on the counter top and must cover the fish standing behind it.
-  { id: "booth1-items", label: "booth1 items", src: [`${PROPS_DIR}/booth1-items.png`], rect: around(0.828, 0.17, 360, 60), layer: "sort", baseY: BOOTH1.maxY + 0.001, item: true },
-  { id: "booth2-items", label: "booth2 items", src: [`${PROPS_DIR}/booth2-items.png`], rect: around(0.502, 0.165, 330, 60), layer: "sort", baseY: BOOTH2.maxY + 0.001, item: true },
+  { id: "booth1-items", label: "booth1 items", src: [`${DIR}/booth1-items.png`], rect: BOOTH1_ITEMS, layer: "sort", baseY: BOOTH1.maxY + 0.001, item: true },
+  { id: "booth2-items", label: "booth2 items", src: [`${DIR}/booth2-items.png`], rect: BOOTH2_ITEMS, layer: "sort", baseY: BOOTH2.maxY + 0.001, item: true },
   // Above the seated fish (who are drawn over the table).
-  { id: "icecream", label: "ice cream", src: [`${PROPS_DIR}/icecream.png`], rect: around(0.78, 0.4, 180, 110), layer: "sort", baseY: PICNIC.maxY + 0.004, item: true },
+  // One random flavour per side (activities pick one id from each group).
+  ...(["left", "right"] as const).flatMap((side) =>
+    ICE_CREAM_FLAVOURS.map(
+      (flavour): SceneSprite => ({
+        id: iceCreamId(side, flavour),
+        label: `${flavour} ice cream`,
+        src: [`${DIR}/icecream-${flavour}.png`],
+        rect: cone(CONE_SPOTS[side], ART.cone[flavour]),
+        layer: "sort",
+        baseY: PICNIC.maxY + 0.004, // over the seated fish
+        item: true,
+      }),
+    ),
+  ),
+  { id: "crab", label: "crab", src: [`${DIR}/crab.png`], rect: CRAB, layer: "sort", scuttles: true },
   // Replaces the static gull while it plays (same feet line, so no jump).
   {
     id: "seagull-anim",
@@ -192,6 +224,7 @@ export const BLOCKED: (Area & { id: string })[] = [
   { id: "picnic", minX: PICNIC.minX + 0.01, minY: 0.45, maxX: PICNIC.maxX - 0.01, maxY: PICNIC.maxY + 0.005 },
   { id: "seagull", minX: SEAGULL.minX, minY: SEAGULL.maxY - 0.035, maxX: SEAGULL.maxX, maxY: SEAGULL.maxY + 0.005 },
   { id: "sandcastle", minX: SANDCASTLE.minX - 0.01, minY: 0.725, maxX: BUCKET.maxX + 0.005, maxY: 0.778 },
+  { id: "crab", minX: CRAB.minX - 0.005, minY: CRAB.maxY - 0.02, maxX: CRAB.maxX + 0.005, maxY: CRAB.maxY + 0.004 },
 ];
 
 /** Gap between the two stalls: the way in/out behind both counters. */

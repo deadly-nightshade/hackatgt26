@@ -37,30 +37,39 @@ beforeEach(async () => {
 });
 
 describe("appearance registry", () => {
-  it("unknown / missing / partial ids read as none (the plain fish)", () => {
+  it("unknown / missing / partial ids read as the slot default (no hat, boots)", () => {
+    expect(DEFAULT_APPEARANCE).toEqual({ version: 1, head: null, feet: "feet-boots" });
+    // Profiles saved before feet existed stored feet: null → boots, not bare stumps.
+    expect(getAppearance({ head: "head-bow", feet: null })).toEqual({ version: 1, head: "head-bow", feet: "feet-boots" });
     expect(getAppearance(undefined)).toEqual(DEFAULT_APPEARANCE);
     expect(getAppearance(null)).toEqual(DEFAULT_APPEARANCE);
     expect(getAppearance("nope")).toEqual(DEFAULT_APPEARANCE);
-    expect(getAppearance({ head: "head-bow" })).toEqual({ version: 1, head: "head-bow", feet: null });
+    expect(getAppearance({ head: "head-bow" })).toEqual({ version: 1, head: "head-bow", feet: "feet-boots" });
     expect(getAppearance({ head: "head-crown", feet: "feet-rollerskates" })).toEqual(DEFAULT_APPEARANCE);
     expect(getAppearance({ head: "none", feet: 42 })).toEqual(DEFAULT_APPEARANCE);
-    expect(getAppearance({ head: "head-bunny", extra: "ignored" })).toEqual({ version: 1, head: "head-bunny", feet: null });
+    expect(getAppearance({ head: "head-bunny", extra: "ignored" })).toEqual({ version: 1, head: "head-bunny", feet: "feet-boots" });
   });
 
-  it("'none' is the first option in every slot; head has 5 accessories, feet none yet", () => {
-    for (const s of SLOTS) expect(s.options[0]).toMatchObject({ id: "none", label: "None" });
+  it("head starts with 'None'; feet has no 'None' (the base has no feet) and defaults to boots", () => {
+    const head = SLOTS.find((s) => s.id === "head")!;
+    const feetSlot = SLOTS.find((s) => s.id === "feet")!;
+    expect(head.options[0]).toMatchObject({ id: "none", label: "None" });
+    expect(feetSlot.options.some((o) => o.id === "none")).toBe(false);
+    expect(feetSlot.options[0].id).toBe(feetSlot.defaultId);
     expect(SLOTS.find((s) => s.id === "head")!.options).toHaveLength(6);
-    expect(slotIsEmpty("feet")).toBe(SLOTS.find((s) => s.id === "feet")!.options.length === 1);
+    expect(SLOTS.find((s) => s.id === "feet")!.options).toHaveLength(5);
+    expect(slotIsEmpty("feet")).toBe(false);
     const ids = SLOTS.flatMap((s) => s.options.map((o) => o.id)).filter((id) => id !== "none");
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("layers stack base → feet → head", () => {
     expect(LAYER_ORDER).toEqual(["base", "feet", "head"]);
-    expect(layersFor(DEFAULT_APPEARANCE)).toEqual([{ layer: "base", src: FISH_BASE.src }]);
-    const layers = layersFor({ version: 1, head: "head-shades", feet: null });
-    expect(layers.map((l) => l.layer)).toEqual(["base", "head"]);
-    expect(layers[1].src).toMatch(/fih_glasses/);
+    expect(layersFor(DEFAULT_APPEARANCE).map((l) => l.src)).toEqual([FISH_BASE.src, expect.stringMatching(/fih_boots/)]);
+    const layers = layersFor({ version: 1, head: "head-shades", feet: "feet-heels" });
+    expect(layers.map((l) => l.layer)).toEqual(["base", "feet", "head"]);
+    expect(layers[1].src).toMatch(/fih_heels/);
+    expect(layers[2].src).toMatch(/fih_glasses/);
   });
 
   it("arrows cycle and wrap; counters are 1-based", () => {
@@ -72,9 +81,10 @@ describe("appearance registry", () => {
     expect(a.head).toBeNull();
     for (let i = 0; i < 6; i++) a = cycle(a, "head", 1);
     expect(a.head).toBeNull(); // full loop
-    // Feet: "none" only until art is added, then the first feet option.
-    const feet = SLOTS.find((s) => s.id === "feet")!.options;
-    expect(cycle(a, "feet", 1).feet).toBe(feet.length > 1 ? feet[1].id : null);
+    // Feet wraps through its 5 options (no "None"): boots → bare feet, and boots ← skates.
+    expect(currentOption(DEFAULT_APPEARANCE, "feet")).toMatchObject({ index: 1, count: 5, option: { label: "Cozy Boots" } });
+    expect(cycle(DEFAULT_APPEARANCE, "feet", 1).feet).toBe("feet-bare");
+    expect(cycle(DEFAULT_APPEARANCE, "feet", -1).feet).toBe("feet-skates");
   });
 
   it("randomize always produces a valid look", () => {
@@ -102,13 +112,13 @@ describe("storing appearance", () => {
     const repo = new ConsoleFileRepository(dir);
     const log = console.log;
     console.log = () => {};
-    const { id } = await repo.save({ profile: base, rawAnswers: [], appearance: { version: 1, head: "head-bow", feet: null } }).finally(() => (console.log = log));
+    const { id } = await repo.save({ profile: base, rawAnswers: [], appearance: { version: 1, head: "head-bow", feet: "feet-boots" } }).finally(() => (console.log = log));
     const before = (await repo.get(id))!;
     expect(before.appearance.head).toBe("head-bow");
     await new Promise((r) => setTimeout(r, 5));
     expect(await repo.setAppearance(id, { version: 1, head: "head-karen", feet: "feet-bogus" })).toBe(true);
     const after = (await repo.get(id))!;
-    expect(after.appearance).toEqual({ version: 1, head: "head-karen", feet: null });
+    expect(after.appearance).toEqual({ version: 1, head: "head-karen", feet: "feet-boots" });
     expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
     expect(after.profile).toEqual(before.profile);
     expect(await repo.setAppearance("missing-fish", DEFAULT_APPEARANCE)).toBe(false);
@@ -147,7 +157,7 @@ describe("storing appearance", () => {
     const afterFirst = aiCalls;
     expect(afterFirst).toBeGreaterThan(0);
     const cacheKey = (await pairs.getPair("ann__ben"))!.profilesUpdatedAt;
-    await profiles.setAppearance("ann", { version: 1, head: "head-bunny", feet: null });
+    await profiles.setAppearance("ann", { version: 1, head: "head-bunny", feet: "feet-boots" });
     const second = await tap();
     expect(aiCalls).toBe(afterFirst); // no regeneration
     expect((await pairs.getPair("ann__ben"))!.profilesUpdatedAt).toEqual(cacheKey);
@@ -160,7 +170,7 @@ describe("appearance in API payloads", () => {
     const profiles = new MemoryProfiles();
     profiles.add("me", { ...base, displayName: "Me" });
     profiles.add("ann", { ...base, displayName: "Ann" });
-    await profiles.setAppearance("ann", { version: 1, head: "head-shades", feet: null });
+    await profiles.setAppearance("ann", { version: 1, head: "head-shades", feet: "feet-boots" });
     const pairs = new MemoryPairs();
     const deps: MeetDeps = { profiles, pairs, ai: new MockMeetAI(), random: () => 0.99, now: () => new Date("2026-09-20T12:00:00Z"), forcedOutcome: "friends", hangoutsEnabled: true, cooldownMs: 0 };
     await runMeet({ initiatorId: "me", targetId: "ann", ignoreCooldown: true }, deps);
@@ -170,6 +180,6 @@ describe("appearance in API payloads", () => {
     expect(world.residents[0].appearance.head).toBe("head-shades");
 
     const replay = await getReplay(pairs.attempts[0]._id, "me", { profiles, pairs });
-    expect(replay.appearances).toEqual({ a: DEFAULT_APPEARANCE, b: { version: 1, head: "head-shades", feet: null } });
+    expect(replay.appearances).toEqual({ a: DEFAULT_APPEARANCE, b: { version: 1, head: "head-shades", feet: "feet-boots" } });
   });
 });

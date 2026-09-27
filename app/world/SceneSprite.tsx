@@ -23,6 +23,7 @@ export function SceneSprite({ sprite: s, ref }: { sprite: Sprite; ref?: Ref<HTML
       className={`wsprite${s.item ? " witem" : ""}${s.frames ? " wstrip" : ""}`}
       data-id={s.id}
       data-hops={s.hops ? "1" : undefined}
+      data-scuttles={s.scuttles ? "1" : undefined}
       data-hide-while={s.hideWhile}
       style={{ left: pct(s.rect.minX), top: pct(s.rect.minY), width: pct(s.rect.maxX - s.rect.minX), height: pct(s.rect.maxY - s.rect.minY), zIndex: z }}
     >

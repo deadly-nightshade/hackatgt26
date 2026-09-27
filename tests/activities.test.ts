@@ -41,6 +41,7 @@ function until(w: SimWorld, done: () => boolean, maxMs = 60000, dt = 20) {
 const run = (w: SimWorld, id: string) => runOf(w, id)!;
 const def = (id: string) => ACTIVITIES.find((a) => a.id === id)!;
 const atAnchor = (f: SimFish) => f.task?.stage === "there";
+const cones = (w: SimWorld) => Object.keys(w.items).filter((id) => id.startsWith("icecream-") && w.items[id]);
 
 describe("paths and blocked props", () => {
   it("planned paths go around blocked rects", () => {
@@ -64,10 +65,12 @@ describe("paths and blocked props", () => {
 
   it("every spawnable item has a label (placeholder) and a configured path", () => {
     const items = SPRITES.filter((s) => s.item);
-    expect(items.map((s) => s.id).sort()).toEqual(["booth1-items", "booth2-items", "icecream", "sandcastle", "seagull-anim"]);
+    expect(items.map((s) => s.id).filter((id) => !id.startsWith("icecream-")).sort()).toEqual(["booth1-items", "booth2-items", "sandcastle", "seagull-anim"]);
+    expect(items.filter((s) => s.id.startsWith("icecream-"))).toHaveLength(6); // 3 flavours × 2 sides
     for (const s of items) expect(s.label && s.src.length).toBeTruthy();
     // Activities only reference sprites that exist.
-    for (const a of ACTIVITIES) for (const id of [...a.effect.itemIds, ...(a.effect.hop ?? [])]) expect(SPRITES.some((s) => s.id === id)).toBe(true);
+    for (const a of ACTIVITIES)
+      for (const id of [...a.effect.itemIds, ...(a.effect.oneOf ?? []).flat(), ...(a.effect.hop ?? [])]) expect(SPRITES.some((s) => s.id === id)).toBe(true);
   });
 });
 
@@ -195,14 +198,15 @@ describe("other activities", () => {
     assign(w, r, fish(w, "a"), 0);
     expect(until(w, () => atAnchor(fish(w, "a")))).toBe(true);
     expect(until(w, () => r.phase === "idle")).toBe(true); // nobody joined within waitMs
-    expect(w.items.icecream).toBeFalsy();
+    expect(cones(w)).toEqual([]);
 
     r.cooldownUntil = 0;
     forceActivity(w, "picnic");
     expect(until(w, () => r.phase === "active")).toBe(true);
     let chatted = false;
-    until(w, () => ((chatted ||= w.fish.some((f) => f.bubble === "hi?" || f.bubble === "hello!")), !!w.items.icecream));
-    expect(w.items.icecream).toBe(true);
+    until(w, () => ((chatted ||= w.fish.some((f) => f.bubble === "hi?" || f.bubble === "hello!")), cones(w).length > 0));
+    // Exactly one random-flavour cone per side.
+    expect(cones(w).map((id) => id.split("-")[1]).sort()).toEqual(["left", "right"]);
     expect(chatted).toBe(true);
   });
 

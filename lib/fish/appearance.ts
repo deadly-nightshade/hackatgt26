@@ -14,9 +14,15 @@ export const FISH_BASE = { src: "/art/fish/fih_base.PNG", width: 2048, height: 2
 
 export type SlotId = "head" | "feet";
 export type FishOption = { id: string; label: string; src?: string };
-export type FishSlot = { id: SlotId; label: string; options: FishOption[] };
+export type FishSlot = {
+  id: SlotId;
+  label: string;
+  options: FishOption[];
+  /** What a fish wears here when nothing (or something unknown) is stored: null = nothing. */
+  defaultId: string | null;
+};
 
-/** First option in every slot. */
+/** "Wear nothing here" (first in slots that allow it). */
 export const NONE: FishOption = { id: "none", label: "None" };
 
 export const SLOTS: FishSlot[] = [
@@ -31,14 +37,21 @@ export const SLOTS: FishSlot[] = [
       { id: "head-headphones", label: "Shell Headphones", src: "/art/fish/head/fih_headphones.PNG" },
       { id: "head-karen", label: "“Karen” Bob", src: "/art/fish/head/fih_karen.PNG" },
     ],
+    defaultId: null,
   },
   {
     id: "feet",
     label: "Feet",
+    // The base sprite has no feet of its own, so there's no "None" here: boots by default
+    // (what every fish wore before feet were customizable).
     options: [
-      NONE,
-      // e.g. { id: "feet-flippers", label: "Flippers", src: "/art/fish/feet/fih_flippers.PNG" },
+      { id: "feet-boots", label: "Cozy Boots", src: "/art/fish/feet/fih_boots.PNG" },
+      { id: "feet-bare", label: "Bare Feet", src: "/art/fish/feet/fih_feet.PNG" },
+      { id: "feet-flipflops", label: "Flip-Flops", src: "/art/fish/feet/fih_flipflops.PNG" },
+      { id: "feet-heels", label: "Red Heels", src: "/art/fish/feet/fih_heels.PNG" },
+      { id: "feet-skates", label: "Roller Skates", src: "/art/fish/feet/fih_skates.PNG" },
     ],
+    defaultId: "feet-boots",
   },
 ];
 
@@ -47,25 +60,26 @@ export const LAYER_ORDER: ("base" | SlotId)[] = ["base", "feet", "head"];
 
 export type Appearance = { version: 1; head: string | null; feet: string | null };
 
-export const DEFAULT_APPEARANCE: Appearance = { version: 1, head: null, feet: null };
+export const DEFAULT_APPEARANCE: Appearance = { version: 1, head: null, feet: "feet-boots" };
 
 const slotOf = (id: SlotId) => SLOTS.find((s) => s.id === id)!;
 const findOption = (slot: SlotId, id: string | null | undefined) => (id ? slotOf(slot).options.find((o) => o.id === id && o.src) : undefined);
 
 /**
- * THE read-time default + validation: missing/partial/garbage → every unknown
- * slot is "none" (null). Old profiles without `appearance` render as the plain fish.
+ * THE read-time default + validation: a missing/partial/unknown slot gets that slot's
+ * default (head: nothing, feet: boots). Old profiles without `appearance` render as
+ * the fish everyone had before customization.
  */
 export function getAppearance(raw: unknown): Appearance {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const pick = (slot: SlotId) => {
     const v = r[slot];
-    return typeof v === "string" && findOption(slot, v) ? v : null;
+    return typeof v === "string" && findOption(slot, v) ? v : slotOf(slot).defaultId;
   };
   return { version: 1, head: pick("head"), feet: pick("feet") };
 }
 
-/** What clients may send (ids are validated by getAppearance; unknown → null). */
+/** What clients may send (ids are validated by getAppearance; unknown → the slot's default). */
 export const AppearanceInput = z
   .object({ head: z.string().max(64).nullable().optional(), feet: z.string().max(64).nullable().optional() })
   .passthrough();

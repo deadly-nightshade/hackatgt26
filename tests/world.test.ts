@@ -90,7 +90,7 @@ describe("getResidentsFor (who appears in my world)", () => {
   it("world bump lines cover my pairs and resident↔resident pairs only", async () => {
     const t = await town();
     const world = await getWorld("me", t.deps);
-    expect(world.me).toEqual({ id: "me", displayName: "Me", catchphrase: "Me says hi!", appearance: { version: 1, head: null, feet: null } });
+    expect(world.me).toEqual({ id: "me", displayName: "Me", catchphrase: "Me says hi!", appearance: { version: 1, head: null, feet: "feet-boots" } });
     const keys = Object.keys(world.bumpLines).sort();
     expect(keys).toEqual([pairKeyOf("me", "ann"), pairKeyOf("me", "ben"), pairKeyOf("me", "cal"), pairKeyOf("ann", "ben")].sort());
     expect(keys).not.toContain(pairKeyOf("ann", "zed"));

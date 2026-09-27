@@ -21,22 +21,18 @@ Every raw file in `public/art/world/` is a **2048 × 2048 RGBA canvas**. They sp
 | `Sandcastle.png` | 251 × 151 at 1085,553 | b | top-left (0.552, 0.696) | **Spawnable item**, left of the bucket. |
 | `Seagull.png` | 199 × 150 at 843,1015 | b | top-left (0.161, 0.566) | Dock edge, in front of the store. Idle hops; hidden while its animation plays. |
 | `seagull_anim/Frame_1..9.png` | 2048² each, shared bounds 283 × 219 at 808,943 | b (strip) | lined up with `Seagull.png` (same drawing, offset +34,+3 px) | Built into one 9-frame strip `seagull-anim.png`. The seagull activity swaps it in for one play at 6 fps, then the static gull returns. Includes its own fries box. |
+| `Booth1 items.png` | 465 × 103 at 1155,843 | b (item) | lined up with Booth 1 (offset 128,209 px into Booth1.png, same 0.85 scale) | Headphones, shades, bow on the counter; shown while a fish works Booth 1. |
+| `Booth2 Items.png` | 331 × 119 at 1085,631 | b (item) | lined up with Booth 2 (offset 101,197 px into Booth2.png, scale 1) | Fries, hot dog and drink on the counter; shown while a fish works Booth 2. |
+| `Vanilla.png`, `Chocolate_.png`, `Strawberry.png` | 79 × 128 / 130 / 123 | b (items) | on the picnic table top, one spot in front of each bench | Picnic: each seated fish gets one random flavour. |
+| `Crab.png` | 113 × 66 at 594,1242 | b | top-left (0.33, 0.735), on the sand | Moved from its painted spot (clashed with the seagull's fries). Idle sideways scuttle; small blocked footprint. |
 | `Ice cream.png` (stand) | 786 × 1031 at 89,305 | b | top-left (0, 0.1), scale 0.9 | Scoop, cone, sign, serving window. Drawn *behind* every fish. |
 | Counter front | 558 × 147 cut from `Ice cream.png` (y 1188–1335: ledge + body) | b | same offset/scale as the stand | Drawn *in front of* the fish standing in the serving window. |
 
 `base.jpg` is the painted sky band (rows 0–136, exactly rgb(125,199,235)), plus sand, dock and seashells. It is solid sea from y 1845 down, so the drifting ocean never shows sand at the bottom edge. `strip.jpg` is base plus a horizontally flipped ocean at 1024². Unmirrored copies of it fill the sides on landscape screens: the straight planks tile, and the flipped ocean's edges meet the scene's wave line.
 
-## Placeholder items
+## Placeholder fallback
 
-Each is `{ id, src, rect, label }` in `SPRITES`. If the PNG is missing or fails to load, a dashed box with the label is drawn instead. Drop a PNG at the path below and it's used, with no code change:
-
-| Item | Path | Shown by |
-|---|---|---|
-| booth1 items | `/public/world/props/booth1-items.png` | Booth 1, while occupied |
-| booth2 items | `/public/world/props/booth2-items.png` | Booth 2, while occupied |
-| ice cream | `/public/world/props/icecream.png` | Picnic table (two fish) |
-
-The item rects are sized for the placeholders. Nudge `rect` in `scene.ts` once real art lands.
+Every item now has real art. The fallback is still there for new ones: each sprite is `{ id, src, rect, label }` in `SPRITES`, and if its PNG is missing or fails to load, a dashed box with the label is drawn instead. Point `src` at where the art will go and it's picked up with no other code change.
 
 ## Depth
 
