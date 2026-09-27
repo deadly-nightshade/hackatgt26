@@ -14,6 +14,7 @@
     "seed:fish": "tsx scripts/seed-fish.ts",
     "meet:pair": "tsx scripts/meet-pair.ts",
     "list:fish": "tsx scripts/list-fish.ts",
+    "remove:fish": "tsx scripts/remove-fish.ts",
     "build:scene": "tsx scripts/build-world-scene.ts"
   },
   "dependencies": {
