@@ -20,7 +20,7 @@ export const WORLD_COLORS = { sky: "#7dc7eb", sea: "#5d87bf" } as const;
 export type Area = { minX: number; maxX: number; minY: number; maxY: number };
 
 /** Where a fish's FEET may wander: the boardwalk in front of the stalls down to the waterline (props are cut out by scene BLOCKED). */
-export const WALKABLE: Area = { minX: 0.04, maxX: 0.96, minY: 0.27, maxY: 0.83 };
+export const WALKABLE: Area = { minX: 0.04, maxX: 0.96, minY: 0.25, maxY: 0.83 };
 
 /**
  * Page framing: the scene fits the viewport width (or height on landscape screens);

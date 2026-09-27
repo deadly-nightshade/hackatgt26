@@ -132,7 +132,8 @@ export const BOOTH2_ITEMS_OFFSET = { x: 1085 - 984, y: 631 - 434 } as const;
 export const BOOTH2_ITEMS = place(BOOTH2.minX + S(BOOTH2_ITEMS_OFFSET.x), BOOTH2.minY + S(BOOTH2_ITEMS_OFFSET.y), ...ART.booth2Items);
 export const BOOTH1_COUNTER = counterRect(BOOTH1, ART.booth1, BOOTH_COUNTER.booth1.top, BOOTH1_SCALE);
 export const BOOTH2_COUNTER = counterRect(BOOTH2, ART.booth2, BOOTH_COUNTER.booth2.top);
-export const PICNIC = place(0.576, 0.303, ...ART.picnic);
+/** Legs end on the dock's planks (its walkable top ends at y 1154 px; below is the dock's front edge). */
+export const PICNIC = place(0.576, 0.281, ...ART.picnic);
 export const BUCKET = place(0.708, 0.684, ...ART.bucket);
 export const SANDCASTLE = place(0.552, 0.696, ...ART.sandcastle);
 export const SEAGULL = place(0.161, 0.566, ...ART.seagull);
@@ -142,7 +143,7 @@ export const CRAB = place(0.33, 0.735, ...ART.crab);
 /** Ice cream flavours (one random cone per seated fish at the picnic table). */
 export const ICE_CREAM_FLAVOURS = ["vanilla", "chocolate", "strawberry"] as const;
 /** Cone spots on the table top, in front of each bench (feet on the table's front lip). */
-const CONE_SPOTS = { left: { x: 0.722, y: 0.459 }, right: { x: 0.842, y: 0.459 } } as const;
+const CONE_SPOTS = { left: { x: 0.722, y: PICNIC.minY + 0.156 }, right: { x: 0.842, y: PICNIC.minY + 0.156 } } as const;
 const cone = (spot: { x: number; y: number }, [w, h]: readonly [number, number]) => place(spot.x - S(w / 2), spot.y - S(h), w, h);
 export const iceCreamId = (side: keyof typeof CONE_SPOTS, flavour: (typeof ICE_CREAM_FLAVOURS)[number]) => `icecream-${side}-${flavour}`;
 const A = SEAGULL_ANIM_ART;
@@ -173,7 +174,8 @@ export const SPRITES: SceneSprite[] = [
   { id: "booth1", label: "booth 1", src: [`${DIR}/booth1.png`], rect: BOOTH1, layer: "back" },
   { id: "booth2-counter", label: "booth 2 counter", src: [`${DIR}/booth2-counter.png`], rect: BOOTH2_COUNTER, layer: "sort", baseY: Z_STALL_COUNTER },
   { id: "booth1-counter", label: "booth 1 counter", src: [`${DIR}/booth1-counter.png`], rect: BOOTH1_COUNTER, layer: "sort", baseY: Z_STALL_COUNTER },
-  { id: "picnic", label: "picnic table", src: [`${DIR}/picnic-table.png`], rect: PICNIC, layer: "sort" },
+  // Always under the fish (they walk around it; seated fish + ice cream draw on top).
+  { id: "picnic", label: "picnic table", src: [`${DIR}/picnic-table.png`], rect: PICNIC, layer: "back" },
   { id: "bucket", label: "bucket & shovel", src: [`${DIR}/bucket-shovel.png`], rect: BUCKET, layer: "sort" },
   { id: "seagull", label: "seagull", src: [`${DIR}/seagull.png`], rect: SEAGULL, layer: "sort", hops: true, hideWhile: "seagull-anim" },
 
@@ -221,7 +223,9 @@ export const BLOCKED: (Area & { id: string })[] = [
   { id: "store", minX: STORE.minX, minY: 0, maxX: COUNTER.maxX, maxY: STORE.maxY + 0.005 },
   { id: "booth2", minX: BOOTH2.minX, minY: BOOTH2.maxY - 0.06, maxX: BOOTH2.maxX, maxY: BOOTH2.maxY + 0.005 },
   { id: "booth1", minX: BOOTH1.minX, minY: BOOTH1.maxY - 0.06, maxX: BOOTH1.maxX, maxY: BOOTH1.maxY + 0.005 },
-  { id: "picnic", minX: PICNIC.minX + 0.01, minY: 0.45, maxX: PICNIC.maxX - 0.01, maxY: PICNIC.maxY + 0.005 },
+  // The whole table (not just its legs): nobody walks across the top or under it.
+  // Pulled in a little on the right so there's still a lane between the table and the scene edge.
+  { id: "picnic", minX: PICNIC.minX, minY: PICNIC.minY, maxX: PICNIC.maxX - 0.022, maxY: PICNIC.maxY + 0.005 },
   { id: "seagull", minX: SEAGULL.minX, minY: SEAGULL.maxY - 0.035, maxX: SEAGULL.maxX, maxY: SEAGULL.maxY + 0.005 },
   { id: "sandcastle", minX: SANDCASTLE.minX - 0.01, minY: 0.725, maxX: BUCKET.maxX + 0.005, maxY: 0.778 },
   { id: "crab", minX: CRAB.minX - 0.005, minY: CRAB.maxY - 0.02, maxX: CRAB.maxX + 0.005, maxY: CRAB.maxY + 0.004 },

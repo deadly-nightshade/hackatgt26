@@ -16,7 +16,7 @@ Every raw file in `public/art/world/` is a **2048 × 2048 RGBA canvas**. They sp
 | `Ocean.png` | 2048², bounds y 1699–2048 | a | `ocean` sprite at its painted position (slight bottom overhang) | Separate so it can drift. Bottom row is exactly rgb(93,135,191). Wave crest is between y 1702 and 1838. |
 | `Booth2.png` (red/white) | 537 × 459 at 984,434 | b | top-left (0.371, 0.02), scale 1 | Where the old "FIH" stall was. Drawn at the very back; its counter (rows 251+) is a separate overlay (`booth2-counter.png`) that only covers the fish working the stall. |
 | `Booth1.png` (blue/white, net) | 744 × 433 at 1027,634 | b | top-left (0.674, 0.054), scale 0.85 | Where the old shell stall was. Drawn at the very back; counter overlay `booth1-counter.png` (rows 230+) covers only the stall worker. |
-| `Pincnic table.png` | 766 × 568 at 641,622 | b | top-left (0.576, 0.303), scale 1 | Where the old table was, on the dock. |
+| `Pincnic table.png` | 766 × 568 at 641,622 | b | top-left (0.576, 0.281), scale 1 (legs end on the planks, above the dock's front edge) | Where the old table was, on the dock. Drawn under every fish; the whole table is blocked (fish walk around it), with a thin lane left on its right. Seated picnic fish and the ice creams draw on top. |
 | `Bucket and shovel.png` | 279 × 180 at 752,536 | b | top-left (0.708, 0.684) | On the sand, as in the old background. |
 | `Sandcastle.png` | 251 × 151 at 1085,553 | b | top-left (0.552, 0.696) | **Spawnable item**, left of the bucket. |
 | `Seagull.png` | 199 × 150 at 843,1015 | b | top-left (0.161, 0.566) | Dock edge, in front of the store. Idle hops; hidden while its animation plays. |

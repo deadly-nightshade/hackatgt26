@@ -66,7 +66,8 @@ const behindStall = (booth: Area): Anchor => ({
   x: midX(booth),
   y: STALL_GAP.y,
   facing: -1,
-  via: [{ x: STALL_GAP.x, y: 0.3 }, STALL_GAP],
+  // Up the lane between the stalls' counters and the picnic table's far edge.
+  via: [{ x: STALL_GAP.x, y: PICNIC.minY - 0.016 }, STALL_GAP],
   zY: Z_STALL_WORKER,
 });
 
@@ -127,8 +128,8 @@ export const ACTIVITIES: ActivityDef[] = [
     zone: rect(PICNIC.minX, PICNIC.minY, PICNIC.maxX, PICNIC.maxY),
     anchors: [
       // Seated fish are drawn over the table (zY), so they're fully visible.
-      { x: 0.61, y: 0.488, facing: 1, via: [{ x: 0.53, y: 0.5 }], zY: PICNIC.maxY + 0.002 },
-      { x: 0.925, y: 0.488, facing: -1, via: [{ x: 0.975, y: 0.5 }], zY: PICNIC.maxY + 0.002 },
+      { x: 0.61, y: PICNIC.minY + 0.185, facing: 1, via: [{ x: 0.53, y: PICNIC.minY + 0.197 }], zY: PICNIC.maxY + 0.002 },
+      { x: 0.925, y: PICNIC.minY + 0.185, facing: -1, via: [{ x: 0.975, y: PICNIC.minY + 0.197 }], zY: PICNIC.maxY + 0.002 },
     ],
     fishRequired: 2,
     waitMs: 8000,
