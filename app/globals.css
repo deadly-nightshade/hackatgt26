@@ -137,6 +137,12 @@ a.button.secondary { color: #1f6f8b; }
 .wsprite[data-hops] img { transform-origin: 50% 100%; animation: idle-hop 9s ease-in-out infinite; }
 .wsprite[data-hops].hop img { animation: hop .35s ease-out 2; }
 @keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14%) scaleY(1.04); } }
+/* Frame-strip animations (the seagull eating fries): swap in/out instantly, play once per show. */
+.wstrip.witem, .wstrip.witem.on { transition: none; transform: none; }
+.wsheet { width: 100%; height: 100%; background-repeat: no-repeat; background-position: 0 0; }
+.wstrip.on .wsheet { animation-name: sheet; animation-fill-mode: forwards; animation-iteration-count: 1; }
+@keyframes sheet { from { background-position: 0 0; } to { background-position: 100% 0; } }
+.wsprite.gone { visibility: hidden; }
 @keyframes idle-hop { 0%, 88%, 100% { transform: none; } 91% { transform: translateY(-10%); } 94% { transform: scaleX(-1); } 97% { transform: scaleX(-1) translateY(-6%); } }
 
 .wfish {

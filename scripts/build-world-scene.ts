@@ -14,7 +14,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-import { ICECREAM_ART, SCENE_PX, SCENE_SEA_FROM, SCENE_SKY_ROWS, SHELLS_LIFT } from "@/lib/world/scene";
+import { ICECREAM_ART, SCENE_PX, SEAGULL_ANIM_ART, SCENE_SEA_FROM, SCENE_SKY_ROWS, SHELLS_LIFT } from "@/lib/world/scene";
 
 const RAW = path.join(process.cwd(), "public", "art", "world");
 const OUT = path.join(process.cwd(), "public", "world", "scene");
@@ -86,6 +86,21 @@ async function cropStore() {
   console.log("counter-front.png      ← Ice cream.png", ICECREAM_ART.counter);
 }
 
+/** Seagull animation: each frame cropped to the shared bounds, laid out left → right in one strip. */
+async function buildSeagullStrip() {
+  const { dir, frames, crop } = SEAGULL_ANIM_ART;
+  const tiles = await Promise.all(
+    Array.from({ length: frames }, (_, i) =>
+      sharp(path.join(RAW, dir, `Frame_${i + 1}.png`)).extract(crop).png().toBuffer(),
+    ),
+  );
+  await sharp({ create: { width: crop.width * frames, height: crop.height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(tiles.map((input, i) => ({ input, left: i * crop.width, top: 0 })))
+    .png({ compressionLevel: 9 })
+    .toFile(path.join(OUT, "seagull-anim.png"));
+  console.log(`seagull-anim.png       ← ${dir}/Frame_1..${frames}.png (strip)`, crop);
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true });
   await buildBase();
@@ -98,6 +113,7 @@ async function main() {
   await cropProp("Sandcastle.png", "sandcastle.png");
   await cropProp("Seagull.png", "seagull.png");
   await cropStore();
+  await buildSeagullStrip();
   // Side fill on wide screens, placed unmirrored beside the scene: sky + sand + dock tile as-is,
   // but the wave line differs at the scene's two edges, so only the ocean is flipped (its edges then meet the scene's).
   const flippedOcean = await sharp(path.join(RAW, "Ocean.png")).flop().toBuffer();

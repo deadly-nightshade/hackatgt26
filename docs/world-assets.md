@@ -19,7 +19,8 @@ Every raw file in `public/art/world/` is a **2048 × 2048 RGBA canvas**. They sp
 | `Pincnic table.png` | 766 × 568 at 641,622 | b | top-left (0.576, 0.303), scale 1 | Where the old table was, on the dock. |
 | `Bucket and shovel.png` | 279 × 180 at 752,536 | b | top-left (0.708, 0.684) | On the sand, as in the old background. |
 | `Sandcastle.png` | 251 × 151 at 1085,553 | b | top-left (0.552, 0.696) | **Spawnable item**, left of the bucket. |
-| `Seagull.png` | 199 × 150 at 843,1015 | b | top-left (0.161, 0.566) | Dock edge, in front of the store. Hops. |
+| `Seagull.png` | 199 × 150 at 843,1015 | b | top-left (0.161, 0.566) | Dock edge, in front of the store. Idle hops; hidden while its animation plays. |
+| `seagull_anim/Frame_1..9.png` | 2048² each, shared bounds 283 × 219 at 808,943 | b (strip) | lined up with `Seagull.png` (same drawing, offset +34,+3 px) | Built into one 9-frame strip `seagull-anim.png`. The seagull activity swaps it in for one play at 6 fps, then the static gull returns. Includes its own fries box. |
 | `Ice cream.png` (stand) | 786 × 1031 at 89,305 | b | top-left (0, 0.1), scale 0.9 | Scoop, cone, sign, serving window. Drawn *behind* every fish. |
 | Counter front | 558 × 147 cut from `Ice cream.png` (y 1188–1335: ledge + body) | b | same offset/scale as the stand | Drawn *in front of* the fish standing in the serving window. |
 
@@ -34,7 +35,6 @@ Each is `{ id, src, rect, label }` in `SPRITES`. If the PNG is missing or fails 
 | booth1 items | `/public/world/props/booth1-items.png` | Booth 1, while occupied |
 | booth2 items | `/public/world/props/booth2-items.png` | Booth 2, while occupied |
 | ice cream | `/public/world/props/icecream.png` | Picnic table (two fish) |
-| fries | `/public/world/props/fries.png` | Seagull |
 
 The item rects are sized for the placeholders. Nudge `rect` in `scene.ts` once real art lands.
 

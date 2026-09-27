@@ -20,12 +20,25 @@ export function SceneSprite({ sprite: s, ref }: { sprite: Sprite; ref?: Ref<HTML
   return (
     <div
       ref={ref}
-      className={`wsprite${s.item ? " witem" : ""}`}
+      className={`wsprite${s.item ? " witem" : ""}${s.frames ? " wstrip" : ""}`}
       data-id={s.id}
       data-hops={s.hops ? "1" : undefined}
+      data-hide-while={s.hideWhile}
       style={{ left: pct(s.rect.minX), top: pct(s.rect.minY), width: pct(s.rect.maxX - s.rect.minX), height: pct(s.rect.maxY - s.rect.minY), zIndex: z }}
     >
-      {src ? (
+      {src && s.frames ? (
+        // Frame strip: CSS steps through it once each time the item turns on.
+        <div
+          className="wsheet"
+          style={{
+            backgroundImage: `url(${src})`,
+            backgroundSize: `${s.frames.count * 100}% 100%`,
+            animationDuration: `${s.frames.count / s.frames.fps}s`,
+            // jump-none: `count` positions from the first to the last frame.
+            animationTimingFunction: `steps(${s.frames.count}, jump-none)`,
+          }}
+        />
+      ) : src ? (
         // Plain <img>: per-file fallbacks via onError; the art is small pre-cropped PNGs.
         // eslint-disable-next-line @next/next/no-img-element
         <img key={src} src={src} alt="" draggable={false} decoding="async" onError={() => setAttempt((a) => a + 1)} />

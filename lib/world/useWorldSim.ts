@@ -27,7 +27,7 @@ export function useWorldSim(ids: string[], bumpLines: Record<string, BumpLine[]>
   const sim = useRef<SimWorld | null>(null);
   const size = useRef(0);
   const painted = useRef(new Map<string, Painted>());
-  const shown = useRef(new Map<string, boolean>());
+  const shown = useRef(new Map<string, string>());
   const lines = useRef(bumpLines);
   lines.current = bumpLines;
 
@@ -131,12 +131,17 @@ export function useWorldSim(ids: string[], bumpLines: Record<string, BumpLine[]>
           line.setAttribute("y2", String(busy ? f.ty : f.y));
         }
       }
-      // Items (fade + pop via CSS) and hopping sprites.
+      // Items (fade + pop via CSS), hopping sprites, and sprites hidden while an item shows.
       for (const [id, el] of items.current) {
-        const on = !!world.items[id] || (world.hops[id] ?? 0) > world.t;
-        if (shown.current.get(id) === on) continue;
-        shown.current.set(id, on);
-        el.classList.toggle(el.dataset.hops ? "hop" : "on", on);
+        const on = !!world.items[id];
+        const hop = (world.hops[id] ?? 0) > world.t;
+        const gone = !!(el.dataset.hideWhile && world.items[el.dataset.hideWhile]);
+        const state = `${+on}${+hop}${+gone}`;
+        if (shown.current.get(id) === state) continue;
+        shown.current.set(id, state);
+        el.classList.toggle("on", on);
+        el.classList.toggle("hop", hop);
+        el.classList.toggle("gone", gone);
       }
     };
 

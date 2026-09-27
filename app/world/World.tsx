@@ -98,7 +98,7 @@ function Island({ world }: { world: WorldResponse }) {
         <div className="world" ref={worldRef}>
           <Image className="world-bg" src={SCENE_BASE.src} alt="The seaside market" fill sizes="(max-aspect-ratio: 1/1) 100vw, 100vh" priority />
           {SPRITES.map((s) => (
-            <SceneSprite key={s.id} sprite={s} ref={s.item || s.hops ? registerItem(s.id) : undefined} />
+            <SceneSprite key={s.id} sprite={s} ref={s.item || s.hops || s.hideWhile ? registerItem(s.id) : undefined} />
           ))}
           {ids.map((id) => {
             const r = byId.get(id);

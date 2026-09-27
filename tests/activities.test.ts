@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ACTIVITIES, assign, forceActivity, runOf } from "@/lib/world/activities";
 import { WALKABLE, WORLD } from "@/lib/world/config";
 import { inBlocked, planPath, segmentClear } from "@/lib/world/paths";
-import { BLOCKED, SPRITES } from "@/lib/world/scene";
+import { BLOCKED, SEAGULL_ANIM_MS, SPRITES } from "@/lib/world/scene";
 import { createSim, findBumps, stepSim, swimOver, type SimFish, type SimWorld } from "@/lib/world/sim";
 
 function rng(seed: number) {
@@ -64,7 +64,7 @@ describe("paths and blocked props", () => {
 
   it("every spawnable item has a label (placeholder) and a configured path", () => {
     const items = SPRITES.filter((s) => s.item);
-    expect(items.map((s) => s.id).sort()).toEqual(["booth1-items", "booth2-items", "fries", "icecream", "sandcastle"]);
+    expect(items.map((s) => s.id).sort()).toEqual(["booth1-items", "booth2-items", "icecream", "sandcastle", "seagull-anim"]);
     for (const s of items) expect(s.label && s.src.length).toBeTruthy();
     // Activities only reference sprites that exist.
     for (const a of ACTIVITIES) for (const id of [...a.effect.itemIds, ...(a.effect.hop ?? [])]) expect(SPRITES.some((s) => s.id === id)).toBe(true);
@@ -218,16 +218,18 @@ describe("other activities", () => {
     expect(fish(w, "b").task?.act).toBe("picnic");
   });
 
-  it("seagull gets fries (and hops), which vanish after maxOnMs", () => {
+  it("seagull plays its fries animation once, then the static gull is back", () => {
     const w = world(["a"]);
     forceActivity(w, "seagull");
     const r = run(w, "seagull");
-    until(w, () => !!w.items.fries);
-    expect(w.hops.seagull).toBeGreaterThan(w.t);
+    until(w, () => !!w.items["seagull-anim"]);
     const on = w.t;
-    until(w, () => !w.items.fries);
-    expect(w.t - on).toBeLessThanOrEqual(def("seagull").effect.maxOnMs! + 40);
-    expect(r.phase).toBe("active"); // fish still there, fries gone
+    until(w, () => !w.items["seagull-anim"]);
+    expect(w.t - on).toBeGreaterThanOrEqual(SEAGULL_ANIM_MS - 40);
+    expect(w.t - on).toBeLessThanOrEqual(SEAGULL_ANIM_MS + 40);
+    expect(r.phase).toBe("active"); // fish still there, animation done
+    // The static gull hides exactly while the animation shows.
+    expect(SPRITES.find((s) => s.id === "seagull")!.hideWhile).toBe("seagull-anim");
   });
 
   it("ice cream counter: the fish is drawn between the store and its counter front", () => {

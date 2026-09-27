@@ -1,6 +1,6 @@
 import { DEMO, WORLD, type Area } from "@/lib/world/config";
 import { planPath } from "@/lib/world/paths";
-import { BOOTH1, BOOTH2, BUCKET, COUNTER, PICNIC, SANDCASTLE, SEAGULL, STALL_GAP, STORE, STORE_WINDOW_X, type Pt } from "@/lib/world/scene";
+import { BOOTH1, BOOTH2, BUCKET, COUNTER, PICNIC, SANDCASTLE, SEAGULL, SEAGULL_ANIM, SEAGULL_ANIM_MS, STALL_GAP, STORE, STORE_WINDOW_X, type Pt } from "@/lib/world/scene";
 import type { SimFish, SimWorld } from "@/lib/world/sim";
 
 /**
@@ -142,12 +142,14 @@ export const ACTIVITIES: ActivityDef[] = [
   {
     id: "seagull",
     label: "Seagull",
-    zone: rect(SEAGULL.minX - 0.02, SEAGULL.minY, SEAGULL.maxX + 0.14, SEAGULL.maxY + 0.03),
-    anchors: [{ x: SEAGULL.maxX + 0.083, y: 0.654, facing: -1 }],
+    zone: rect(SEAGULL_ANIM.minX - 0.02, SEAGULL_ANIM.minY, SEAGULL_ANIM.maxX + 0.1, SEAGULL.maxY + 0.03),
+    // Just right of the fries box in the animation.
+    anchors: [{ x: SEAGULL_ANIM.maxX + 0.064, y: 0.654, facing: -1 }],
     fishRequired: 1,
     dwellMs: [4500, 6000],
     triggerAfterMs: 1500,
-    effect: { itemIds: ["fries"], mode: "whileOccupied", maxOnMs: 3500, hop: ["seagull"] },
+    // The gull swaps to its eating animation for one play, then the hopping gull comes back.
+    effect: { itemIds: ["seagull-anim"], mode: "whileOccupied", maxOnMs: SEAGULL_ANIM_MS },
     cooldownMs: 10000,
     weight: 1.5,
     pose: "stand",

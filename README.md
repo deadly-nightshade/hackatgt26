@@ -132,7 +132,7 @@ The market is now built from separate layers and props (asset notes and placemen
   - **Sandcastle:** the fish calls the nearest free fish (friends preferred). Both dig and a castle appears. It stays 4s after they leave. If nobody comes within 8s, the fish says "aw…".
   - **Booths 1/2:** a fish stands behind the counter and items show while it's there.
   - **Picnic table:** needs two fish. The one waiting draws others in. When both sit (drawn over the table), they swap bump lines and ice cream appears.
-  - **Seagull:** fries appear and the gull hops.
+  - **Seagull:** the gull swaps to its fries-eating animation (`seagull_anim/`, 9 frames), plays it once, then the idle hopping gull comes back.
   - **Ice cream counter:** a fish stands in the serving window, behind the stand's counter front.
 
   "Swim over" cancels whatever the two fish were doing.

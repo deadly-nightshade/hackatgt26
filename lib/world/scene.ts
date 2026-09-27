@@ -26,6 +26,24 @@ export const ICECREAM_ART = {
   windowX: 431,
 } as const;
 
+/**
+ * Seagull eating fries (public/art/world/seagull_anim/Frame_1..9.png): full canvases,
+ * cropped to their shared bounds into one horizontal strip by the build script.
+ * The gull in the frames is Seagull.png's exact drawing, shifted by `offset` px.
+ */
+export const SEAGULL_ANIM_ART = {
+  dir: "seagull_anim",
+  frames: 9,
+  crop: { left: 808, top: 943, width: 283, height: 219 },
+  /** Frame-canvas px → Seagull.png-canvas px (so the swap doesn't jump). */
+  offset: { x: 34, y: 3 },
+  /** Seagull.png's own crop origin (its opaque bounds). */
+  staticOrigin: { left: 843, top: 1015 },
+  fps: 6,
+} as const;
+/** One play of the eating animation (last frame held a moment). */
+export const SEAGULL_ANIM_MS = Math.round((SEAGULL_ANIM_ART.frames / SEAGULL_ANIM_ART.fps) * 1000) + 400;
+
 export type Pt = { x: number; y: number };
 
 /** Draw order: "back" under every fish, "front" over every fish, "sort" by its base (bottom edge) y. */
@@ -44,6 +62,10 @@ export type SceneSprite = {
   item?: boolean;
   /** Decorations that do an idle/triggered hop (the seagull). */
   hops?: boolean;
+  /** Hidden while this item is shown (the static seagull while its animation plays). */
+  hideWhile?: string;
+  /** `src` is a horizontal strip of this many frames, played once (at fps) each time the item shows. */
+  frames?: { count: number; fps: number };
 };
 
 const S = (px: number) => px / SCENE_PX;
@@ -90,6 +112,13 @@ export const PICNIC = place(0.576, 0.303, ...ART.picnic);
 export const BUCKET = place(0.708, 0.684, ...ART.bucket);
 export const SANDCASTLE = place(0.552, 0.696, ...ART.sandcastle);
 export const SEAGULL = place(0.161, 0.566, ...ART.seagull);
+const A = SEAGULL_ANIM_ART;
+export const SEAGULL_ANIM = place(
+  SEAGULL.minX + S(A.crop.left + A.offset.x - A.staticOrigin.left),
+  SEAGULL.minY + S(A.crop.top + A.offset.y - A.staticOrigin.top),
+  A.crop.width,
+  A.crop.height,
+);
 const STORE_SCALE = 0.9;
 export const STORE = place(0, 0.1, ICECREAM_ART.bounds.width, ICECREAM_ART.bounds.height, STORE_SCALE);
 export const COUNTER = place(
@@ -111,7 +140,7 @@ export const SPRITES: SceneSprite[] = [
   { id: "booth1", label: "booth 1", src: [`${DIR}/booth1.png`], rect: BOOTH1, layer: "sort" },
   { id: "picnic", label: "picnic table", src: [`${DIR}/picnic-table.png`], rect: PICNIC, layer: "sort" },
   { id: "bucket", label: "bucket & shovel", src: [`${DIR}/bucket-shovel.png`], rect: BUCKET, layer: "sort" },
-  { id: "seagull", label: "seagull", src: [`${DIR}/seagull.png`], rect: SEAGULL, layer: "sort", hops: true },
+  { id: "seagull", label: "seagull", src: [`${DIR}/seagull.png`], rect: SEAGULL, layer: "sort", hops: true, hideWhile: "seagull-anim" },
 
   // ── spawnable items (hidden until an activity shows them) ──
   { id: "sandcastle", label: "sandcastle", src: [`${DIR}/sandcastle.png`], rect: SANDCASTLE, layer: "sort", item: true },
@@ -120,7 +149,17 @@ export const SPRITES: SceneSprite[] = [
   { id: "booth2-items", label: "booth2 items", src: [`${PROPS_DIR}/booth2-items.png`], rect: around(0.502, 0.165, 330, 60), layer: "sort", baseY: BOOTH2.maxY + 0.001, item: true },
   // Above the seated fish (who are drawn over the table).
   { id: "icecream", label: "ice cream", src: [`${PROPS_DIR}/icecream.png`], rect: around(0.78, 0.4, 180, 110), layer: "sort", baseY: PICNIC.maxY + 0.004, item: true },
-  { id: "fries", label: "fries", src: [`${PROPS_DIR}/fries.png`], rect: around(0.274, 0.622, 90, 80), layer: "sort", item: true },
+  // Replaces the static gull while it plays (same feet line, so no jump).
+  {
+    id: "seagull-anim",
+    label: "seagull eating fries",
+    src: [`${DIR}/seagull-anim.png`],
+    rect: SEAGULL_ANIM,
+    layer: "sort",
+    baseY: SEAGULL.maxY,
+    item: true,
+    frames: { count: SEAGULL_ANIM_ART.frames, fps: SEAGULL_ANIM_ART.fps },
+  },
 ];
 
 // ── walking ─────────────────────────────────────────────────────────────────
