@@ -2,7 +2,9 @@
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-app), system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* LILAC has one weight: never let the browser smear it; bold is the outline below. Italic may still be slanted. */
+  font-synthesis: style;
   background: #fdf8f0;
   color: #1d2a30;
   line-height: 1.5;
@@ -106,7 +108,7 @@ a.button.secondary { color: #1f6f8b; }
   color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6);
 }
 .world-title { font-weight: 700; font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.world-header a { color: #fff; font-weight: 600; white-space: nowrap; }
+.world-header a { color: #fff; white-space: nowrap; }
 /* Square scene: full width on phones, full height on landscape screens; never stretched. */
 .world {
   position: relative; width: min(100vw, 100dvh);
@@ -119,7 +121,7 @@ a.button.secondary { color: #1f6f8b; }
 }
 .world-empty {
   position: absolute; left: 50%; top: 26%; transform: translateX(-50%); width: min(80%, 320px); z-index: 45000;
-  background: rgba(255,255,255,.92); border-radius: 14px; padding: 12px 14px; text-align: center; font-weight: 600;
+  background: rgba(255,255,255,.92); border-radius: 14px; padding: 12px 14px; text-align: center;
 }
 
 /* Scene props + activity items (positions/z from lib/world/scene.ts). */
@@ -177,7 +179,7 @@ a.button.secondary { color: #1f6f8b; }
 .wfish-bubble {
   position: absolute; left: 50%; bottom: calc(100% + 1.6em); transform: translateX(-50%);
   background: #fff; color: #1d2a30; border: 2px solid #1d2a30; border-radius: 12px; padding: 3px 9px;
-  font-size: clamp(12px, 1.6vw, 15px); font-weight: 600; white-space: nowrap; animation: pop .18s ease-out;
+  font-size: clamp(12px, 1.6vw, 15px); white-space: nowrap; animation: pop .18s ease-out;
 }
 .wfish-bubble::after {
   content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
@@ -308,3 +310,15 @@ a.button.swim-btn { display: flex; align-items: center; justify-content: center;
 .find-results { list-style: none; padding: 0; margin: 8px 0 0; }
 .find-results button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; margin-bottom: 6px; min-height: 56px; }
 .find-sprite { flex: 0 0 44px; }
+
+/*
+ * Fake bold (the app font has no bold): a 0.5px outline in the text's own colour.
+ * Only real bold (headings, <strong>, and rules above with font-weight: 700) — everything else stays regular.
+ */
+/* LILAC is already heavier than the old system font, so bold only needs a light touch. */
+:root { --fake-bold: 0.3px; }
+h1, h2, h3, h4, h5, h6, b, strong, th, legend,
+.fish-name, .dialogue .speaker, .world-title, .wplaceholder,
+.wfish-name, .swim-btn, .creator-arrow, .creator-status.ready {
+  -webkit-text-stroke: var(--fake-bold) currentColor;
+}

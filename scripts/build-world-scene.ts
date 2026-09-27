@@ -14,7 +14,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-import { ICECREAM_ART, SCENE_PX, SEAGULL_ANIM_ART, SCENE_SEA_FROM, SCENE_SKY_ROWS, SHELLS_LIFT } from "@/lib/world/scene";
+import { BOOTH_COUNTER, ICECREAM_ART, SCENE_PX, SEAGULL_ANIM_ART, SCENE_SEA_FROM, SCENE_SKY_ROWS, SHELLS_LIFT } from "@/lib/world/scene";
 
 const RAW = path.join(process.cwd(), "public", "art", "world");
 const OUT = path.join(process.cwd(), "public", "world", "scene");
@@ -113,6 +113,14 @@ async function main() {
   await cropProp("Sandcastle.png", "sandcastle.png");
   await cropProp("Seagull.png", "seagull.png");
   await cropStore();
+  // Stall counters (table top + front box): drawn over a fish working the stall.
+  for (const id of ["booth1", "booth2"] as const) {
+    const file = path.join(OUT, `${id}.png`);
+    const { width = 0, height = 0 } = await sharp(file).metadata();
+    const { top } = BOOTH_COUNTER[id];
+    await sharp(file).extract({ left: 0, top, width, height: height - top }).png({ compressionLevel: 9 }).toFile(path.join(OUT, `${id}-counter.png`));
+    console.log(`${`${id}-counter.png`.padEnd(22)} ← ${id}.png rows ${top}–${height}`);
+  }
   await buildSeagullStrip();
   // Side fill on wide screens, placed unmirrored beside the scene: sky + sand + dock tile as-is,
   // but the wave line differs at the scene's two edges, so only the ocean is flipped (its edges then meet the scene's).

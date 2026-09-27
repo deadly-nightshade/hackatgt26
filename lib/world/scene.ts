@@ -108,6 +108,21 @@ export const SCENE_BASE = { src: `${DIR}/base.jpg`, strip: `${DIR}/strip.jpg` } 
 const BOOTH1_SCALE = 0.85;
 export const BOOTH1 = place(0.674, 0.054, ...ART.booth1, BOOTH1_SCALE);
 export const BOOTH2 = place(0.371, 0.02, ...ART.booth2);
+
+/**
+ * The stalls sit at the very back (behind every walking fish, so nobody gets cut off
+ * between them). Only a fish working a stall goes behind its counter: each counter
+ * (table top + front box, from `top` px of the cropped sprite down) is a thin overlay
+ * drawn between the stall-worker (Z_STALL_WORKER) and everyone else.
+ */
+export const BOOTH_COUNTER = { booth1: { top: 230 }, booth2: { top: 251 } } as const;
+/** Draw-order y: stall-worker fish < counter overlays < every normal fish/prop (all ≥ 0). */
+export const Z_STALL_WORKER = -0.004;
+export const Z_STALL_COUNTER = -0.003;
+const counterRect = (booth: Area, [w, h]: readonly [number, number], top: number, scale = 1) =>
+  place(booth.minX, booth.minY + S(top * scale), w, h - top, scale);
+export const BOOTH1_COUNTER = counterRect(BOOTH1, ART.booth1, BOOTH_COUNTER.booth1.top, BOOTH1_SCALE);
+export const BOOTH2_COUNTER = counterRect(BOOTH2, ART.booth2, BOOTH_COUNTER.booth2.top);
 export const PICNIC = place(0.576, 0.303, ...ART.picnic);
 export const BUCKET = place(0.708, 0.684, ...ART.bucket);
 export const SANDCASTLE = place(0.552, 0.696, ...ART.sandcastle);
@@ -136,8 +151,10 @@ export const SPRITES: SceneSprite[] = [
   // The store body sits behind everyone; only its counter front covers a fish in the window.
   { id: "store", label: "ice cream stand", src: [`${DIR}/icecream-store.png`], rect: STORE, layer: "back" },
   { id: "counter-front", label: "counter front", src: [`${DIR}/counter-front.png`], rect: COUNTER, layer: "sort" },
-  { id: "booth2", label: "booth 2", src: [`${DIR}/booth2.png`], rect: BOOTH2, layer: "sort" },
-  { id: "booth1", label: "booth 1", src: [`${DIR}/booth1.png`], rect: BOOTH1, layer: "sort" },
+  { id: "booth2", label: "booth 2", src: [`${DIR}/booth2.png`], rect: BOOTH2, layer: "back" },
+  { id: "booth1", label: "booth 1", src: [`${DIR}/booth1.png`], rect: BOOTH1, layer: "back" },
+  { id: "booth2-counter", label: "booth 2 counter", src: [`${DIR}/booth2-counter.png`], rect: BOOTH2_COUNTER, layer: "sort", baseY: Z_STALL_COUNTER },
+  { id: "booth1-counter", label: "booth 1 counter", src: [`${DIR}/booth1-counter.png`], rect: BOOTH1_COUNTER, layer: "sort", baseY: Z_STALL_COUNTER },
   { id: "picnic", label: "picnic table", src: [`${DIR}/picnic-table.png`], rect: PICNIC, layer: "sort" },
   { id: "bucket", label: "bucket & shovel", src: [`${DIR}/bucket-shovel.png`], rect: BUCKET, layer: "sort" },
   { id: "seagull", label: "seagull", src: [`${DIR}/seagull.png`], rect: SEAGULL, layer: "sort", hops: true, hideWhile: "seagull-anim" },

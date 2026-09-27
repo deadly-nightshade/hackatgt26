@@ -28,6 +28,8 @@ export function useWorldSim(ids: string[], bumpLines: Record<string, BumpLine[]>
   const size = useRef(0);
   const painted = useRef(new Map<string, Painted>());
   const shown = useRef(new Map<string, string>());
+  /** Name+bubble extents relative to the head point (measured when the text changes). */
+  const tagBox = useRef(new Map<string, { half: number; above: number }>());
   const lines = useRef(bumpLines);
   lines.current = bumpLines;
 
@@ -97,7 +99,6 @@ export function useWorldSim(ids: string[], bumpLines: Record<string, BumpLine[]>
         el.style.transform = `translate3d(${left.toFixed(1)}px, ${(f.y * W - fh).toFixed(1)}px, 0) scale(${scale.toFixed(3)})`;
         // Name + bubble ride above every prop, at the (scaled) head.
         const tag = tags.current.get(f.id);
-        if (tag) tag.style.transform = `translate3d(${(f.x * W).toFixed(1)}px, ${(f.y * W - fh * scale).toFixed(1)}px, 0)`;
 
         const z = zOf(f.zY ?? f.y);
         const walking = f.mode === "walk" || f.mode === "approach" || (f.mode === "task" && f.task?.stage === "going");
@@ -115,6 +116,23 @@ export function useWorldSim(ids: string[], bumpLines: Record<string, BumpLine[]>
             bubble.textContent = f.bubble ?? "";
             bubble.hidden = !f.bubble;
           }
+          // Re-measure only when the text changes (no per-frame layout reads).
+          let half = 0;
+          let above = 0;
+          for (const child of tag.children as HTMLCollectionOf<HTMLElement>) {
+            if (child.hidden) continue;
+            half = Math.max(half, child.offsetWidth / 2);
+            above = Math.max(above, -child.offsetTop);
+          }
+          tagBox.current.set(f.id, { half, above });
+        }
+        if (tag) {
+          // Keep the name and bubble inside the scene (fish at the edges / behind the stalls up top).
+          const box = tagBox.current.get(f.id) ?? { half: 0, above: 0 };
+          const pad = 4;
+          const tx = Math.min(Math.max(f.x * W, box.half + pad), W - box.half - pad);
+          const ty = Math.max(f.y * W - fh * scale, box.above + pad);
+          tag.style.transform = `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0)`;
         }
         if (!prev) {
           el.dataset.ready = "1";

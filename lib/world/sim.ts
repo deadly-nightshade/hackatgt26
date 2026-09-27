@@ -294,6 +294,8 @@ function followPath(f: SimFish, dt: number, speed = f.speed): boolean {
     const ms = (d / speed) * 1000;
     if (moveToward(f, p.x, p.y, speed, left)) {
       f.path.shift();
+      // Leaving an anchor: back to normal draw order once out from behind the counter.
+      if (f.mode === "walk") f.zY = null;
       left -= ms;
     } else left = 0;
   }

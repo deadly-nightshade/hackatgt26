@@ -1,6 +1,6 @@
 import { DEMO, WORLD, type Area } from "@/lib/world/config";
 import { planPath } from "@/lib/world/paths";
-import { BOOTH1, BOOTH2, BUCKET, COUNTER, PICNIC, SANDCASTLE, SEAGULL, SEAGULL_ANIM, SEAGULL_ANIM_MS, STALL_GAP, STORE, STORE_WINDOW_X, type Pt } from "@/lib/world/scene";
+import { BOOTH1, BOOTH2, BUCKET, COUNTER, PICNIC, SANDCASTLE, SEAGULL, SEAGULL_ANIM, SEAGULL_ANIM_MS, STALL_GAP, STORE, STORE_WINDOW_X, Z_STALL_WORKER, type Pt } from "@/lib/world/scene";
 import type { SimFish, SimWorld } from "@/lib/world/sim";
 
 /**
@@ -15,7 +15,7 @@ export type Anchor = Pt & {
   facing: 1 | -1;
   /** Fixed route from outside (via[0] is reached by normal path planning; later legs may enter blocked rects). */
   via?: Pt[];
-  /** Draw-order y while on the via route / at the anchor (e.g. between the store and its counter front). */
+  /** Draw-order y on the final leg in, at the anchor, and the first leg out (e.g. between the store and its counter front). */
   zY?: number;
 };
 
@@ -65,6 +65,7 @@ const behindStall = (booth: Area): Anchor => ({
   y: STALL_GAP.y,
   facing: -1,
   via: [{ x: STALL_GAP.x, y: 0.3 }, STALL_GAP],
+  zY: Z_STALL_WORKER,
 });
 
 export const ACTIVITIES: ActivityDef[] = [
@@ -388,8 +389,8 @@ function start(w: SimWorld, r: ActivityRun) {
 export function routeZ(w: SimWorld, f: SimFish): number | null {
   if (!f.task) return null;
   const a = runOf(w, f.task.act)?.def.anchors[f.task.slot];
-  // Route = [planned…, via[0], via[1…], anchor]: once via[0] is reached, `via.length` legs remain.
-  return a?.via && a.zY !== undefined && f.path.length <= a.via.length ? a.zY : null;
+  // Only the last leg into the anchor (after the final via point), not the walk through the gap.
+  return a?.via && a.zY !== undefined && f.path.length <= 1 ? a.zY : null;
 }
 
 /** Advance every activity's state machine (called once per sim step, after fish move). */
