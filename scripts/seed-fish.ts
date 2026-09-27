@@ -130,7 +130,7 @@ function buildSeedProfile(s: SeedSpec): Profile {
     summary: s.summary,
     interests: s.interests.map(([name, category, tag]) => ({ name, category, tag, evidence: "(seed profile)", confidence: 0.9 })),
     wantsToTry: (s.wantsToTry ?? []).map(([name, tag]) => ({ name, tag, evidence: "(seed profile)" })),
-    socialStyle: { energy: s.energy, groupSize: "small_group", planning: "flexible", evidence: "(seed profile)" },
+    socialStyle: { energy: s.energy, energyEvidence: "(seed profile)", groupSize: "small_group", groupSizeEvidence: "(seed profile)", planning: null, planningEvidence: null },
     traits: { openness: trait, conscientiousness: trait, extraversion: trait, agreeableness: trait, emotionalStability: trait },
     vibeType: { mbti: "ISFP", label: "Seed Fish", confidence: 0.1, disclaimer: "just for fun" },
     conversationStarters: ["What's your favorite thing at the market?", "What are you into lately?"],

@@ -16,16 +16,30 @@ export type ProfileRecord = {
   isSeed?: boolean;
   /** Chosen in the onboarding creator (default: plain fish). */
   appearance?: Appearance;
+  /** How they onboarded (analytics/debug only). */
+  onboardingMode?: OnboardingMode;
 };
+
+export type OnboardingMode = "quick" | "full";
+
+/** update() options: cosmetic edits (name, summary, catchphrase…) don't touch the pair AI cache key. */
+export type UpdateOptions = { contentChanged?: boolean };
 
 /** A saved profile as read back (for meet-ups and dev tools). */
 export type StoredProfile = {
   id: string;
   profile: Profile;
   createdAt: Date;
-  /** Content changes only — the pair AI cache keys on this, so appearance edits never touch it. */
+  /** Any profile edit (not appearance). */
   updatedAt: Date;
+  /**
+   * THE pair AI cache key: bumps only when matching fields change (interests, wantsToTry,
+   * socialStyle — or a full redo). Cosmetic edits and appearance never touch it.
+   * Older docs without it fall back to updatedAt (so existing caches stay valid).
+   */
+  contentUpdatedAt: Date;
   isSeed: boolean;
+  onboardingMode: OnboardingMode | null;
   /** Always complete: missing/partial/unknown slots read as "none" (getAppearance). */
   appearance: Appearance;
 };
@@ -39,7 +53,16 @@ export interface ProfileRepository {
   delete(id: string): Promise<void>;
   /** Saves appearance + appearanceUpdatedAt only (NOT updatedAt). False if the profile doesn't exist. */
   setAppearance(id: string, appearance: Appearance): Promise<boolean>;
+  /**
+   * Replace an existing fish's profile IN PLACE (redo onboarding, profile edits) — same id, so
+   * pairs/friendships/history stay. rawAnswers/appearance/onboardingMode are kept when omitted.
+   * Bumps updatedAt; bumps contentUpdatedAt (the pair AI cache key) unless `contentChanged: false`.
+   * Keeps createdAt/isSeed. False if the profile doesn't exist.
+   */
+  update(id: string, record: UpdateRecord, opts?: UpdateOptions): Promise<boolean>;
 }
+
+export type UpdateRecord = Pick<ProfileRecord, "profile"> & Partial<Pick<ProfileRecord, "rawAnswers" | "appearance" | "onboardingMode">>;
 
 export function newProfileId(): string {
   return randomUUID();
@@ -71,8 +94,10 @@ export function toStoredProfile(doc: Record<string, unknown> & { _id: string }):
     profile: parsed.data,
     createdAt: date(doc.createdAt),
     updatedAt: date(doc.updatedAt),
+    contentUpdatedAt: date(doc.contentUpdatedAt ?? doc.updatedAt),
     isSeed: doc.isSeed === true,
     appearance: getAppearance(doc.appearance),
+    onboardingMode: doc.onboardingMode === "quick" || doc.onboardingMode === "full" ? doc.onboardingMode : null,
   };
 }
 
@@ -93,7 +118,9 @@ export class ConsoleFileRepository implements ProfileRepository {
           _id: id,
           createdAt,
           updatedAt: now,
+          contentUpdatedAt: now,
           ...(record.isSeed ? { isSeed: true } : {}),
+          ...(record.onboardingMode ? { onboardingMode: record.onboardingMode } : {}),
           ...record.profile,
           appearance: getAppearance(record.appearance ?? DEFAULT_APPEARANCE),
           appearanceUpdatedAt: now,
@@ -127,6 +154,35 @@ export class ConsoleFileRepository implements ProfileRepository {
   async delete(id: string): Promise<void> {
     if (!isValidProfileId(id)) return;
     await rm(path.join(this.dir, `${id}.json`), { force: true });
+  }
+
+  async update(id: string, record: UpdateRecord, { contentChanged = true }: UpdateOptions = {}): Promise<boolean> {
+    if (!isValidProfileId(id)) return false;
+    const file = path.join(this.dir, `${id}.json`);
+    const old = await readFile(file, "utf8").then(JSON.parse, () => null);
+    if (!old) return false;
+    printProfile(id, { rawAnswers: [], ...record, id });
+    const now = new Date().toISOString();
+    await writeFile(
+      file,
+      JSON.stringify(
+        {
+          _id: id,
+          createdAt: old.createdAt ?? now,
+          updatedAt: now,
+          contentUpdatedAt: contentChanged ? now : (old.contentUpdatedAt ?? old.updatedAt ?? now),
+          ...(old.isSeed ? { isSeed: true } : {}),
+          ...((record.onboardingMode ?? old.onboardingMode) ? { onboardingMode: record.onboardingMode ?? old.onboardingMode } : {}),
+          ...record.profile,
+          appearance: getAppearance(record.appearance ?? old.appearance),
+          appearanceUpdatedAt: record.appearance ? now : old.appearanceUpdatedAt ?? now,
+          rawAnswers: record.rawAnswers ?? old.rawAnswers ?? [],
+        },
+        null,
+        2,
+      ),
+    );
+    return true;
   }
 
   async setAppearance(id: string, appearance: Appearance): Promise<boolean> {

@@ -15,13 +15,14 @@ import {
   type MeetResponse,
   type Pair,
 } from "@/lib/meet/schema";
-import { scoreAnalysis } from "@/lib/meet/score";
+import { energyMatches, scoreAnalysis } from "@/lib/meet/score";
 import {
   alreadyFriendsScript,
   clammedUpScript,
   cooldownScript,
   fallbackHangoutLines,
   fallbackMiddle,
+  fill,
   friendsScript,
   hangoutScript,
   planText,
@@ -40,8 +41,6 @@ export type MeetDeps = {
   forcedOutcome?: ForcedOutcome | null;
   hangoutsEnabled?: boolean;
   cooldownMs?: number;
-  /** Strangers' wait after a clammed-up meet (default meetConfig.strangerRetryMs()). */
-  strangerRetryMs?: number;
 };
 
 export type MeetInput = {
@@ -80,8 +79,8 @@ export function isCacheValid(pair: Pair | null, model: string, a: StoredProfile,
     pair.similarity !== undefined &&
     pair.promptVersion === PROMPT_VERSION &&
     pair.model === model &&
-    pair.profilesUpdatedAt?.[0]?.getTime() === a.updatedAt.getTime() &&
-    pair.profilesUpdatedAt?.[1]?.getTime() === b.updatedAt.getTime()
+    pair.profilesUpdatedAt?.[0]?.getTime() === a.contentUpdatedAt.getTime() &&
+    pair.profilesUpdatedAt?.[1]?.getTime() === b.contentUpdatedAt.getTime()
   );
 }
 
@@ -104,6 +103,8 @@ async function generateContent(ai: MeetAI, a: StoredProfile, b: StoredProfile, p
     log("meet", `analysis failed for ${pairKey}, using template fallback: ${(err as Error).message}`);
     return fallbackContent(a, b);
   }
+  // Energy match is decided in code, never by the model (nulls / "balanced" never match).
+  analysis = { ...analysis, styleNotes: { ...analysis.styleNotes, energyMatch: energyMatches(a.profile.socialStyle, b.profile.socialStyle) } };
   const similarity = scoreAnalysis(analysis);
   try {
     const { bumpLines, ...dialogue } = await ai.dialogue(a.profile, b.profile, analysis);
@@ -146,13 +147,15 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
 
   const names = { a: initiator.profile.displayName, b: target.profile.displayName };
   const orient = (lines: DialogueLine[]) => (initiatorIsA ? lines : lines.map((l) => ({ ...l, speaker: swap(l.speaker) })));
+  const pairNames = { a: A.profile.displayName, b: B.profile.displayName };
   const scriptInput = (analysis: Analysis, middle: DialogueLine[]): ScriptInput => ({
     pairKey,
     attemptNumber,
     names,
     spotlight: analysis.spotlight,
     plan: planText(analysis, { a: A.profile.displayName, b: B.profile.displayName }, pairKey, attemptNumber),
-    middle: orient(middle),
+    // Generated lines say {a}/{b} (pair order); fill current names, then orient to the initiator.
+    middle: orient(middle.map((l) => ({ ...l, text: fill(l.text, pairNames) }))),
   });
 
   /** Logs the attempt (with the exact script that played) and builds the response. Called once per request. */
@@ -217,38 +220,23 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
     };
   };
 
-  // 2. Already friends → no AI, no roll.
-  if (pair.status === "friends") {
-    const analysis = pair.analysis ?? fallbackContent(A, B).analysis;
-    const similarity = pair.similarity ?? scoreAnalysis(analysis);
-    if (!(deps.hangoutsEnabled ?? meetConfig.hangoutsEnabled())) {
-      return respond({ outcome: "already_friends", script: alreadyFriendsScript(scriptInput(analysis, [])), similarity, analysis });
+  /** Steps 3–8: the cached analysis/dialogue/bump lines, regenerated (once, shared by concurrent taps) when stale. */
+  const getContent = async (): Promise<{ content: Content; refreshed: boolean }> => {
+    if (!input.regenerate && isCacheValid(existing, deps.ai.model, A, B)) {
+      return {
+        content: { analysis: pair.analysis!, similarity: pair.similarity!, dialogue: pair.dialogue!, bumpLines: pair.bumpLines ?? [], usedFallback: false },
+        refreshed: false,
+      };
     }
-    return runHangout({ deps, input, pair, A, B, analysis, similarity, now, scriptInput, respond });
-  }
-
-  // 2b. Clammed up recently → no new roll until they tap again after a while (no AI, not a real attempt).
-  if (existing && pair.status === "strangers" && !input.ignoreCooldown) {
-    const retryMs = deps.strangerRetryMs ?? meetConfig.strangerRetryMs();
-    const lastFail = Math.max(0, ...attempts.filter((a) => a.outcome === "clammed_up").map((a) => a.createdAt.getTime()));
-    if (lastFail && now.getTime() - lastFail < retryMs) {
-      const analysis = pair.analysis ?? fallbackContent(A, B).analysis;
-      return respond({ outcome: "cooldown", script: stillShyScript(names.b), similarity: pair.similarity ?? scoreAnalysis(analysis), analysis });
+    if (existing?.analysis && existing.promptVersion !== PROMPT_VERSION) {
+      log("meet", `${pairKey}: regenerating for prompt ${existing.promptVersion ?? "?"} → ${PROMPT_VERSION}`);
     }
-  }
-
-  // 3–8. Get or create the cached content.
-  let content: Content;
-  const regenerate = !!input.regenerate;
-  if (!regenerate && isCacheValid(existing, deps.ai.model, A, B)) {
-    content = { analysis: pair.analysis!, similarity: pair.similarity!, dialogue: pair.dialogue!, bumpLines: pair.bumpLines ?? [], usedFallback: false };
-  } else {
     let job = inflight.get(pairKey);
     if (!job) {
       job = generateContent(deps.ai, A, B, pairKey).finally(() => inflight.delete(pairKey));
       inflight.set(pairKey, job);
     }
-    content = await job;
+    const content = await job;
     if (!content.usedFallback) {
       Object.assign(pair, {
         analysis: content.analysis,
@@ -257,14 +245,32 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
         bumpLines: content.bumpLines,
         promptVersion: PROMPT_VERSION,
         model: deps.ai.model,
-        profilesUpdatedAt: [A.updatedAt, B.updatedAt],
+        profilesUpdatedAt: [A.contentUpdatedAt, B.contentUpdatedAt],
       } satisfies Partial<Pair>);
       await deps.pairs.savePair(pair);
     }
+    return { content, refreshed: !content.usedFallback };
+  };
+
+  // 2. Already friends → no roll. (A hangout refreshes stale content first — see runHangout.)
+  if (pair.status === "friends") {
+    const analysis = pair.analysis ?? fallbackContent(A, B).analysis;
+    const similarity = pair.similarity ?? scoreAnalysis(analysis);
+    if (!(deps.hangoutsEnabled ?? meetConfig.hangoutsEnabled())) {
+      return respond({ outcome: "already_friends", script: alreadyFriendsScript(scriptInput(analysis, [])), similarity, analysis });
+    }
+    return runHangout({ deps, input, pair, A, B, analysis, similarity, now, scriptInput, respond, getContent });
   }
 
+  // 3–8. Get or create the cached content.
+  const { content } = await getContent();
+
   // 9. Roll.
-  const forced = deps.forcedOutcome === undefined ? meetConfig.forcedOutcome() : deps.forcedOutcome;
+  // Clammed up last time → the next tap (or visit to their link) always makes them friends.
+  // An explicit force (FORCE_MEET_OUTCOME / tests) still wins.
+  const configured = deps.forcedOutcome === undefined ? meetConfig.forcedOutcome() : deps.forcedOutcome;
+  const secondChance = failsSinceSuccess(attempts) > 0;
+  const forced = configured ?? (secondChance ? "friends" : null);
   const { outcome, pFail, roll } = rollMeet({
     similarity: content.similarity,
     failsSinceSuccess: failsSinceSuccess(attempts),
@@ -299,11 +305,6 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
   });
 }
 
-/** A too-soon re-tap after clammed up: one narrator line (logged as a hidden "cooldown" attempt). */
-function stillShyScript(targetName: string): DialogueLine[] {
-  return [{ speaker: "narrator", text: `${targetName} is still feeling a little shy… Try tapping their tag again in a while! 🐚`, mood: "shy" }];
-}
-
 /** Stretch: a re-tap between friends = a hangout (or a cooldown line). */
 async function runHangout(ctx: {
   deps: MeetDeps;
@@ -316,13 +317,26 @@ async function runHangout(ctx: {
   now: Date;
   scriptInput: (analysis: Analysis, middle: DialogueLine[]) => ScriptInput;
   respond: (r: { outcome: MeetOutcome; script: DialogueLine[]; similarity: number; analysis: Analysis; usedFallback?: boolean; leveledUp?: boolean }) => Promise<MeetResponse>;
+  getContent: () => Promise<{ content: Content; refreshed: boolean }>;
 }): Promise<MeetResponse> {
-  const { deps, pair, analysis, similarity, now } = ctx;
+  const { deps, pair, now } = ctx;
+  let { analysis, similarity } = ctx;
   const cooldownMs = deps.cooldownMs ?? meetConfig.hangoutCooldownMs();
   const lastTogether = Math.max(pair.lastHangoutAt?.getTime() ?? 0, pair.friendsSince?.getTime() ?? 0);
 
   if (!ctx.input.ignoreCooldown && now.getTime() - lastTogether < cooldownMs) {
     return ctx.respond({ outcome: "cooldown", script: cooldownScript(ctx.scriptInput(analysis, [])), similarity, analysis });
+  }
+
+  // Stale content (new prompt version, or someone's interests changed) → refresh it now, lazily.
+  // Status and level stay; unused old scenes are dropped so the next ones use the fresh content.
+  const { content, refreshed } = await ctx.getContent();
+  let freshScenesNeeded = false;
+  if (refreshed) {
+    analysis = content.analysis;
+    similarity = content.similarity;
+    pair.hangoutScenes = pair.hangoutScenes.filter((s) => s.usedAt);
+    freshScenesNeeded = true;
   }
 
   const previousLevel = pair.level;
@@ -336,7 +350,7 @@ async function runHangout(ctx: {
   if (!scene) {
     const firstBatch = pair.hangoutScenes.length === 0;
     const levelRose = pair.level > (pair.sceneBatchLevel ?? 0);
-    if (firstBatch || (levelRose && pair.sceneBatchesGenerated < LEVELS.length)) {
+    if (firstBatch || freshScenesNeeded || (levelRose && pair.sceneBatchesGenerated < LEVELS.length)) {
       try {
         const scenes = await deps.ai.scenes(ctx.A.profile, ctx.B.profile, analysis, {
           levelName: levelName(pair.level),

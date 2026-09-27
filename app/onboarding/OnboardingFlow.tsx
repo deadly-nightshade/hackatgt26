@@ -6,9 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { FishCreator } from "@/app/_components/FishCreator";
 import { FishSprite } from "@/app/_components/FishSprite";
 import { DEFAULT_APPEARANCE, getAppearance, type Appearance } from "@/lib/fish/appearance";
-import { setFishId } from "@/lib/meet/identity";
+import { FISH_ID_HEADER, getFishId, setFishId } from "@/lib/meet/identity";
 import type { OnboardingQuestion } from "@/lib/onboarding/questions";
-import type { Answer, Profile } from "@/lib/profile/schema";
+import type { Answer, Profile, ProfileView } from "@/lib/profile/schema";
 import AnswerInput from "./AnswerInput";
 import FindMyFish from "./FindMyFish";
 import ReviewProfile from "./ReviewProfile";
@@ -63,7 +63,12 @@ function useAudioPlayer() {
   return { play, replay, stop, available, playing };
 }
 
-export default function OnboardingFlow({ questions, returnTo }: { questions: OnboardingQuestion[]; returnTo: string | null }) {
+/** ⚡ Quick setup asks only this question (no follow-up), then goes straight to the creator. */
+const QUICK_QUESTION_ID = "free_day";
+
+export default function OnboardingFlow({ questions: allQuestions, returnTo }: { questions: OnboardingQuestion[]; returnTo: string | null }) {
+  const [quick, setQuick] = useState(false);
+  const questions = quick ? allQuestions.filter((qq) => qq.id === QUICK_QUESTION_ID) : allQuestions;
   const router = useRouter();
   const [step, setStep] = useState<Step>("name");
   const [displayName, setDisplayName] = useState("");
@@ -74,6 +79,28 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  /** This browser already has a fish → onboarding updates it in place (same id: friendships stay). */
+  const [existing, setExisting] = useState<{ id: string; displayName: string } | null>(null);
+
+  useEffect(() => {
+    const id = getFishId();
+    if (!id) return;
+    fetch(`/api/users/${encodeURIComponent(id)}/profile`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j) return; // stale id → a brand-new fish
+        setExisting({ id, displayName: j.profile.displayName });
+        setDisplayName((n) => n || j.profile.displayName);
+        // Keep their current look unless they already picked one this session.
+        try {
+          if (sessionStorage.getItem(LOOK_KEY)) return;
+        } catch {
+          // ignore
+        }
+        setAppearance(getAppearance(j.appearance));
+      })
+      .catch(() => {});
+  }, []);
   const [saving, setSaving] = useState(false);
   const [extraction, setExtraction] = useState<Extraction>({ status: "idle" });
   const [appearance, setAppearance] = useState<Appearance>(DEFAULT_APPEARANCE);
@@ -147,7 +174,8 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
   }
 
   async function onNext() {
-    if (a.checked) return advance();
+    // Quick setup: never a follow-up.
+    if (a.checked || quick) return advance();
     setChecking(true);
     let followUp: string | undefined;
     try {
@@ -193,14 +221,22 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
     }
   }
 
-  async function confirm(edited: Profile) {
+  /** The review screen never sees traits; they're re-attached here only to be saved (never shown). */
+  async function confirm(edited: ProfileView) {
     setSaving(true);
     setError(null);
     try {
       const res = await fetch("/api/onboarding/confirm", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile: edited, rawAnswers: rawAnswers(), appearance }),
+        headers: { "Content-Type": "application/json", ...(existing ? { [FISH_ID_HEADER]: existing.id } : {}) },
+        // With an existing fish: update it in place (same id), never create a second one.
+        body: JSON.stringify({
+          profile: { ...edited, traits: profile?.traits },
+          rawAnswers: rawAnswers(),
+          appearance,
+          onboardingMode: quick ? "quick" : "full",
+          ...(existing ? { id: existing.id } : {}),
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || `Save failed (${res.status})`);
@@ -223,16 +259,29 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
   if (step === "name") {
     return (
       <main>
-        <h1>Welcome to the seaside market 🌊</h1>
-        <p>Answer a few quick questions out loud (or type) and we&apos;ll turn you into an island resident.</p>
+        <h1>{existing ? `Update ${existing.displayName}'s answers 🐟` : "Welcome to the seaside market 🌊"}</h1>
+        {existing ? (
+          <p>Answer the questions again and we&apos;ll refresh your profile. Your friends, levels and look all stay.</p>
+        ) : (
+          <p>Answer a few quick questions out loud (or type) and we&apos;ll turn you into an island resident.</p>
+        )}
         <label htmlFor="name">What should your friends call you?</label>
         <input id="name" value={displayName} maxLength={60} onChange={(e) => setDisplayName(e.target.value)} />
+        <label className="quick-setup">
+          <input type="checkbox" checked={quick} onChange={(e) => setQuick(e.target.checked)} /> ⚡ Quick setup — just 1 question
+        </label>
         <div className="row">
-          <button disabled={!displayName.trim()} onClick={() => setStep("questions")}>
+          <button
+            disabled={!displayName.trim()}
+            onClick={() => {
+              setQIndex(0);
+              setStep("questions");
+            }}
+          >
             Start
           </button>
         </div>
-        <FindMyFish initialName={displayName} onFound={() => router.replace(returnTo ?? "/world")} />
+        {!existing && <FindMyFish initialName={displayName} onFound={() => router.replace(returnTo ?? "/world")} />}
       </main>
     );
   }
@@ -292,15 +341,16 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
             </button>
           )}
           {a.followUp && (
+            // Always visible on a follow-up; skipping never blocks progress.
             <button
-              className="secondary"
+              className="secondary skip-followup"
               onClick={() => {
                 update({ followUpAnswer: "" });
                 advance();
               }}
               disabled={busy}
             >
-              Skip
+              Skip this one →
             </button>
           )}
           <button onClick={onNext} disabled={busy || checking || !a.main.trim()}>
@@ -352,6 +402,7 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
           <h1>Is this you, {profile.displayName}?</h1>
         </div>
         <p className="muted">Remove anything that doesn&apos;t feel right. Nothing is saved until you confirm.</p>
+        {quick && <p className="hint">Add more interests anytime in Edit profile ✏️</p>}
         <ReviewProfile profile={profile} onConfirm={confirm} saving={saving} />
         {error && <p className="error">{error}</p>}
       </main>
@@ -361,7 +412,10 @@ export default function OnboardingFlow({ questions, returnTo }: { questions: Onb
   return (
     <main>
       <h1>Welcome to the island, {profile?.displayName} 🏝️</h1>
-      <p>Your resident profile is saved.{returnTo ? " Taking you back…" : ""}</p>
+      <p>
+        {existing ? "Your profile is updated, and your friends are all still here." : "Your resident profile is saved."}
+        {returnTo ? " Taking you back…" : ""}
+      </p>
       <p className="muted">
         Profile id: <code>{savedId}</code>
       </p>

@@ -1,5 +1,14 @@
 import { SCORE } from "@/lib/meet/config";
 import type { Analysis } from "@/lib/meet/schema";
+import type { SocialStyle } from "@/lib/profile/schema";
+
+/**
+ * Energy "matches" only when BOTH are known, equal, and not the hedging middle ("balanced").
+ * Nulls never match. This (not the model) decides styleNotes.energyMatch.
+ */
+export function energyMatches(a: Pick<SocialStyle, "energy">, b: Pick<SocialStyle, "energy">): boolean {
+  return !!a.energy && a.energy === b.energy && a.energy !== "balanced";
+}
 
 /**
  * Validated analysis → similarity in [0, 1].

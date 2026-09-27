@@ -1,7 +1,11 @@
 /** Every tunable for meet-ups lives here. Env reads are functions so scripts can load .env first. */
 
 /** Bump when the analysis/dialogue prompts change: invalidates every cached pair. */
-export const PROMPT_VERSION = "meet-1";
+/**
+ * Bump when the analysis/dialogue/scene/bumpLines prompts change: pairs regenerate lazily on
+ * their next meet (friends: on their next hangout). meet-2: tone rules + {a}/{b} name placeholders.
+ */
+export const PROMPT_VERSION = "meet-2";
 
 // ── Roll (lib/meet/roll.ts) ──────────────────────────────────────────────
 export const ROLL = {
@@ -74,15 +78,6 @@ export const meetConfig = {
   hangoutsEnabled(): boolean {
     const v = (process.env.MEET_HANGOUTS ?? "true").toLowerCase();
     return !["0", "false", "no", "off"].includes(v);
-  },
-  /**
-   * After a clammed-up meet, strangers must wait this long before a re-tap rolls again
-   * (a re-tap / page reload sooner just gets a "still shy" scene). STRANGER_RETRY_MINUTES, default 5.
-   */
-  strangerRetryMs(): number {
-    const raw = Number(process.env.STRANGER_RETRY_MINUTES);
-    const minutes = Number.isFinite(raw) && raw >= 0 && process.env.STRANGER_RETRY_MINUTES ? raw : 5;
-    return minutes * 60_000;
   },
   hangoutCooldownMs(): number {
     const raw = Number(process.env.HANGOUT_COOLDOWN_MINUTES);

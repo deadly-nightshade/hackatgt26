@@ -26,6 +26,39 @@ const tag = z
   .min(1)
   .describe("normalized lowercase kebab-case, e.g. 'k-pop-dance-covers'");
 
+export const ENERGY = ["homebody", "balanced", "out_and_about"] as const;
+export const GROUP_SIZE = ["one_on_one", "small_group", "big_group", "flexible"] as const;
+export const PLANNING = ["spontaneous", "flexible", "planner"] as const;
+
+/** null = unknown. Only set a value when the answers clearly support it (no defaulting to the middle option). */
+const styleValue = <T extends readonly [string, ...string[]]>(values: T, what: string) =>
+  z.enum(values).nullable().describe(`${what}; null unless the answers clearly show it`);
+const styleEvidence = z.string().nullable().describe("short quote supporting the value, or null");
+
+/** What the extractor must return: every key present (nullable). */
+const SocialStyleExtracted = z.object({
+  energy: styleValue(ENERGY, "homebody vs going out"),
+  energyEvidence: styleEvidence,
+  groupSize: styleValue(GROUP_SIZE, "preferred group size"),
+  groupSizeEvidence: styleEvidence,
+  planning: styleValue(PLANNING, "spontaneous vs planner"),
+  planningEvidence: styleEvidence,
+});
+
+/**
+ * As stored. Older profiles have non-null values and one shared `evidence` string —
+ * still valid (no migration): missing per-field evidence reads as null, the old field is dropped.
+ */
+export const SocialStyleSchema = z.object({
+  energy: z.enum(ENERGY).nullable(),
+  energyEvidence: z.string().nullable().default(null),
+  groupSize: z.enum(GROUP_SIZE).nullable(),
+  groupSizeEvidence: z.string().nullable().default(null),
+  planning: z.enum(PLANNING).nullable(),
+  planningEvidence: z.string().nullable().default(null),
+});
+export type SocialStyle = z.infer<typeof SocialStyleSchema>;
+
 const Trait = z.object({
   score: z.number().min(1).max(5).describe("1 = very low, 5 = very high"),
   confidence,
@@ -51,12 +84,7 @@ export const ExtractedProfileSchema = z.object({
       evidence: z.string().min(1),
     }),
   ),
-  socialStyle: z.object({
-    energy: z.enum(["homebody", "balanced", "out_and_about"]),
-    groupSize: z.enum(["one_on_one", "small_group", "big_group", "flexible"]),
-    planning: z.enum(["spontaneous", "flexible", "planner"]),
-    evidence: z.string(),
-  }),
+  socialStyle: SocialStyleExtracted,
   traits: z.object({
     openness: Trait,
     conscientiousness: Trait,
@@ -81,6 +109,7 @@ export type ExtractedProfile = z.infer<typeof ExtractedProfileSchema>;
 
 /** The full, stored profile. */
 export const ProfileSchema = ExtractedProfileSchema.extend({
+  socialStyle: SocialStyleSchema,
   schemaVersion: z.literal(SCHEMA_VERSION),
   displayName: z.string().trim().min(1).max(60),
   vibeType: ExtractedProfileSchema.shape.vibeType.extend({
@@ -104,6 +133,33 @@ export const extractedProfileJsonSchema = (() => {
   }) as Record<string, unknown>;
   return schema;
 })();
+
+/**
+ * Social style for display: only real, non-hedging values. "balanced"/"flexible" are hidden
+ * everywhere (can't tell a real answer from AI hedging on older profiles); null = unknown.
+ */
+export const STYLE_CHIPS: Record<string, string> = {
+  homebody: "🏠 Homebody",
+  out_and_about: "🌆 Out and about",
+  one_on_one: "👥 One-on-one",
+  small_group: "🐟 Small groups",
+  big_group: "🎉 Big groups",
+  spontaneous: "⚡ Spontaneous",
+  planner: "📅 Planner",
+};
+export function styleChips(s: Pick<SocialStyle, "energy" | "groupSize" | "planning">): string[] {
+  return [s.energy, s.groupSize, s.planning].flatMap((v) => (v && STYLE_CHIPS[v] ? [STYLE_CHIPS[v]] : []));
+}
+
+/**
+ * What the browser gets: everything except the personality traits. Traits stay internal
+ * (stored, never shown or sent to the client — not on the review screen, not on /me).
+ */
+export type ProfileView = Omit<Profile, "traits">;
+export function withoutTraits(p: Profile): ProfileView {
+  const { traits: _hidden, ...rest } = p;
+  return rest;
+}
 
 /** Assemble the stored profile from LLM output + server-owned fields. */
 export function buildProfile(extracted: ExtractedProfile, displayName: string): Profile {

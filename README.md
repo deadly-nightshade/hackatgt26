@@ -25,6 +25,7 @@ With the default `AI_MODE=mock`, the whole flow runs with **zero API calls**: tr
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run extract:fixtures [-- --only rich,messy]` | Runs `extractProfile` on `fixtures/answers/*.json` and checks each result: schema valid, every interest has evidence, and none of the fixture's `mustNotContain` sensitive terms appear. Needs `AI_MODE=live` for real output |
 | `npm run remove:fish -- <id> [<id> ...]` | Deletes those fish (profiles) and every pair + meet attempt involving them. Respects `STORAGE`. Get ids from `npm run list:fish` |
+| `npm run merge:fish -- --from <newId> --into <oldId>` | Someone onboarded twice? Copies the new fish's profile, answers and look onto the old fish in place. The old fish keeps its id, friendships, levels and history. Backs up the old profile to `data/backups/` first and deletes nothing |
 | `npm run build:scene` | Crops the raw art in `public/art/world/` into the `/world` scene sprites (`public/world/scene/`) and crops the ice cream stand + its counter front. Re-run after replacing art |
 | `npm run seed:fish [-- --for <userId>] [-- --clear]` | Inserts 5 labeled seed fish (`isSeed: true`, ids `seed-1-…` to `seed-5-…`) covering strong overlap, close-only overlap, a bridge only, zero overlap and a near-twin. Idempotent. `--for <userId>` also builds that user a sample `/world`: meets and hangouts at levels 1–4, one stranger, one pair between two residents, all run through the real pipeline with the mock AI (0 model calls). Existing pairs are left alone. `--clear` removes the seeds and their pairs/attempts |
 | `npm run meet:pair -- <idA> <idB> [--attempts N] [--hangouts N] [--ignore-cooldown] [--reset] [--regenerate] [--force friends\|clammed_up]` | Runs the meet pipeline from the terminal and prints the analysis, similarity, pFail/roll and script. Writes to storage like a real tap. `--reset` deletes the pair first |
@@ -52,7 +53,6 @@ See [.env.example](.env.example). Summary:
 | `ENABLE_WHOAMI` | Turns on `/dev/whoami` in production (lists every fish and lets anyone switch identity). Always on in dev |
 | `MEET_HANGOUTS` | Re-taps between friends become hangouts that level up (default `true`). `false` → always "already friends" |
 | `HANGOUT_COOLDOWN_MINUTES` | Minimum time between hangouts (default 60; use 1 for a demo) |
-| `STRANGER_RETRY_MINUTES` | After a clammed-up meet, how long before a re-tap rolls again (default 5). Sooner re-taps or page reloads get a "still shy" scene with no AI call. There is no "Try again" button: retries only happen by tapping the tag again |
 
 ## Layout
 
@@ -154,6 +154,18 @@ The market is now built from separate layers and props (asset notes and placemen
 ### Identity across browsers
 
 Your fish id lives in the browser, in localStorage plus a long-lived cookie backup. An NFC tap opens the phone's default browser (Safari on iPhone), which may not be where you onboarded: an in-app browser, another browser, the home-screen app, or a different address. When there's no id, the onboarding page now has **"Already made your fish?"**. Type your fish's name, tap it, and you continue to the tag you scanned (`GET /api/users/find?name=`, exact name match, not seeds).
+
+## Profiles, tone and quick setup
+
+- **Tone:** every prompt that writes user-facing text (meet dialogue, hangout scenes, bump lines, the onboarding summary and labels) includes `TONE_RULES` (`lib/ai/tone.ts`): friendly like classmates, public places only, never romance or beds, and "cozy" only if the person said it. A code check (`toneProblem`) sends offending dialogue back for a rewrite, and bad bump lines are dropped.
+- **Names:** generated lines use `{a}` / `{b}` and are filled at play time, so renaming never stales cached dialogue. Saved replay scripts keep the names they played with.
+- **Prompt version:** `PROMPT_VERSION` = `meet-2`. Pairs regenerate lazily on their next meet (friends on their next hangout: status and level stay, unused old scenes are replaced). Each regeneration is logged.
+- **Edit profile (`/me`):** every user-facing field, saved with `PATCH /api/users/:id/profile` (owner only, no AI). Added or renamed items get evidence "added by you" at confidence 1, and tags come from the names.
+- **Cache key:** the pair AI cache keys on `contentUpdatedAt`. It only bumps for interests, wants-to-try and social style (or a full redo). Name, summary, vibe, stall, catchphrase and starters edits never regenerate anything.
+- **⚡ Quick setup:** a checkbox at the start of onboarding. It asks only the first question with no follow-up, goes straight to the creator, and stores `onboardingMode: "quick"`. The review screen and `/me` then hint to add interests later.
+- **Follow-ups:** a follow-up only appears when an answer is thin. It must reference what they said, be at most 20 words and end in "?"; anything else is dropped in code. Every follow-up has a "Skip this one →" button.
+- **Social style:** each field is nullable with its own evidence. The extractor must use `null` unless the answers clearly show a value. Only real values are shown, as chips; "balanced"/"flexible"/unknown are hidden, and the section disappears if nothing is left. Energy counts as a match only when both are known, equal and not "balanced".
+- **Replay background:** history replays use `REPLAY_BG` (`/replay/bg.png`, set in `lib/world/config.ts`). The whole image is shown, with extra space filled sky `#7dc7eb` above and sea `#5d87bf` below. If the file is missing, replays use the normal cutscene background.
 
 ## Deploy
 

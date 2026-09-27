@@ -6,6 +6,14 @@ export const WORLD_BG = { src: "/art/world/BackgroundTemp.png", width: 2048, hei
 /** Fish sprite box (native art faces LEFT); accessories overlay it 1:1 (lib/fish/appearance.ts). */
 export const FISH_SPRITE = FISH_BASE;
 
+/**
+ * History replays use their own background (live /meet cutscenes keep WORLD_BG). Kept at its
+ * aspect ratio; any extra space is filled with REPLAY_BG_FILL (sky above, sea below). If the file
+ * is missing or fails to load, replays fall back to the normal cutscene background.
+ */
+export const REPLAY_BG = { src: "/replay/bg.png" } as const;
+export const REPLAY_BG_FILL = { top: "#7dc7eb", bottom: "#5d87bf" } as const;
+
 /** Exact colors at the scene's top/bottom edges (rgb(125,199,235) / rgb(93,135,191)), for the blocks above/below it. */
 export const WORLD_COLORS = { sky: "#7dc7eb", sea: "#5d87bf" } as const;
 

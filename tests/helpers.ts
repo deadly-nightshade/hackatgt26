@@ -9,7 +9,21 @@ import type { ProfileRepository, StoredProfile } from "@/lib/storage/profileRepo
 export class MemoryProfiles implements ProfileRepository {
   constructor(public map = new Map<string, StoredProfile>()) {}
   add(id: string, profile: Profile, updatedAt = new Date("2026-01-01")) {
-    this.map.set(id, { id, profile, createdAt: updatedAt, updatedAt, isSeed: false, appearance: DEFAULT_APPEARANCE });
+    this.map.set(id, { id, profile, createdAt: updatedAt, updatedAt, contentUpdatedAt: updatedAt, isSeed: false, appearance: DEFAULT_APPEARANCE, onboardingMode: null });
+  }
+  /** Tests may pass `at` to control timestamps. */
+  async update(id: string, record: { profile: Profile; appearance?: Appearance }, opts: { contentChanged?: boolean; at?: Date } = {}) {
+    const p = this.map.get(id);
+    if (!p) return false;
+    const now = opts.at ?? new Date();
+    this.map.set(id, {
+      ...p,
+      profile: record.profile,
+      updatedAt: now,
+      contentUpdatedAt: opts.contentChanged === false ? p.contentUpdatedAt : now,
+      appearance: getAppearance(record.appearance ?? p.appearance),
+    });
+    return true;
   }
   async setAppearance(id: string, appearance: Appearance) {
     const p = this.map.get(id);

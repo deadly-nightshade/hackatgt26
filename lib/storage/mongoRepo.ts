@@ -9,6 +9,8 @@ import {
   toStoredProfile,
   type ProfileListItem,
   type ProfileRecord,
+  type UpdateOptions,
+  type UpdateRecord,
   type ProfileRepository,
   type StoredProfile,
 } from "@/lib/storage/profileRepo";
@@ -19,6 +21,9 @@ export type ProfileDocument = Profile & {
   updatedAt: Date;
   rawAnswers: Answer[];
   isSeed?: boolean;
+  /** Pair AI cache key (missing on older docs → updatedAt). */
+  contentUpdatedAt?: Date;
+  onboardingMode?: "quick" | "full";
   /** Missing on profiles from before customization (read as the plain fish). */
   appearance?: Appearance;
   appearanceUpdatedAt?: Date;
@@ -79,6 +84,8 @@ export class MongoProfileRepository implements ProfileRepository {
       _id: id,
       createdAt: record.createdAt ?? now,
       updatedAt: now,
+      contentUpdatedAt: now,
+      ...(record.onboardingMode ? { onboardingMode: record.onboardingMode } : {}),
       rawAnswers: record.rawAnswers,
       appearance: getAppearance(record.appearance ?? DEFAULT_APPEARANCE),
       appearanceUpdatedAt: now,
@@ -103,6 +110,32 @@ export class MongoProfileRepository implements ProfileRepository {
 
   async delete(id: string): Promise<void> {
     await (await this.collection()).deleteOne({ _id: id });
+  }
+
+  async update(id: string, record: UpdateRecord, { contentChanged = true }: UpdateOptions = {}): Promise<boolean> {
+    if (!isValidProfileId(id)) return false;
+    const col = await this.collection();
+    const old = await col.findOne({ _id: id });
+    if (!old) return false;
+    printProfile(id, { rawAnswers: [], ...record, id });
+    const mode = record.onboardingMode ?? old.onboardingMode;
+    const now = new Date();
+    // Replace (not $set) so fields dropped from the schema don't linger; identity + timestamps carried over.
+    await col.replaceOne(
+      { _id: id },
+      {
+        ...record.profile,
+        createdAt: old.createdAt ?? now,
+        updatedAt: now,
+        contentUpdatedAt: contentChanged ? now : (old.contentUpdatedAt ?? old.updatedAt ?? now),
+        ...(mode ? { onboardingMode: mode } : {}),
+        rawAnswers: record.rawAnswers ?? old.rawAnswers ?? [],
+        appearance: getAppearance(record.appearance ?? old.appearance),
+        appearanceUpdatedAt: record.appearance ? now : old.appearanceUpdatedAt ?? now,
+        ...(old.isSeed ? { isSeed: true } : {}),
+      },
+    );
+    return true;
   }
 
   async setAppearance(id: string, appearance: Appearance): Promise<boolean> {

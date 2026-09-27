@@ -1,15 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Profile } from "@/lib/profile/schema";
-
-const TRAIT_LABELS: Record<keyof Profile["traits"], string> = {
-  openness: "Openness",
-  conscientiousness: "Conscientiousness",
-  extraversion: "Extraversion",
-  agreeableness: "Agreeableness",
-  emotionalStability: "Emotional stability",
-};
+import { styleChips, type ProfileView } from "@/lib/profile/schema";
 
 const pretty = (s: string) => s.replace(/_/g, " ");
 
@@ -20,13 +12,13 @@ export default function ReviewProfile({
   saving = false,
   readOnly = false,
 }: {
-  profile: Profile;
-  onConfirm?: (p: Profile) => void;
+  profile: ProfileView;
+  onConfirm?: (p: ProfileView) => void;
   saving?: boolean;
   readOnly?: boolean;
 }) {
-  const [draft, setDraft] = useState<Profile>(profile);
-  const set = (patch: Partial<Profile>) => setDraft((d) => ({ ...d, ...patch }));
+  const [draft, setDraft] = useState<ProfileView>(profile);
+  const set = (patch: Partial<ProfileView>) => setDraft((d) => ({ ...d, ...patch }));
 
   return (
     <>
@@ -84,28 +76,18 @@ export default function ReviewProfile({
         </section>
       )}
 
-      <section className="card">
-        <h2>Social style</h2>
-        <p>
-          {pretty(draft.socialStyle.energy)} · {pretty(draft.socialStyle.groupSize)} · {pretty(draft.socialStyle.planning)}
-        </p>
-      </section>
-
-      <section className="card">
-        <h2>Personality snapshot</h2>
-        <ul className="items">
-          {(Object.keys(TRAIT_LABELS) as (keyof Profile["traits"])[]).map((k) => (
-            <li key={k}>
-              <span>{TRAIT_LABELS[k]}</span>
-              <span className="muted">
-                {"●".repeat(Math.round(draft.traits[k].score))}
-                {"○".repeat(5 - Math.round(draft.traits[k].score))}
-                {draft.traits[k].confidence < 0.4 && " (unsure)"}
+      {styleChips(draft.socialStyle).length > 0 && (
+        <section className="card">
+          <h2>Social style</h2>
+          <p className="style-chips">
+            {styleChips(draft.socialStyle).map((c) => (
+              <span key={c} className="chip">
+                {c}
               </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+            ))}
+          </p>
+        </section>
+      )}
 
       <section className="card">
         <h2>

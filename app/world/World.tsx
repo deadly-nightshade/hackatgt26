@@ -9,7 +9,7 @@ import { FishArtPreloader, FishSprite } from "@/app/_components/FishSprite";
 import { LEVELS } from "@/lib/meet/config";
 import { getFishId } from "@/lib/meet/identity";
 import type { AttemptKind } from "@/lib/meet/schema";
-import { FRAMING, WORLD, WORLD_COLORS } from "@/lib/world/config";
+import { FRAMING, REPLAY_BG, WORLD, WORLD_COLORS } from "@/lib/world/config";
 import { SCENE_BASE, SPRITES } from "@/lib/world/scene";
 import type { HistoryItem, ReplayResponse, Resident, WorldResponse } from "@/lib/world/types";
 import { useWorldSim } from "@/lib/world/useWorldSim";
@@ -322,6 +322,7 @@ function ReplayModal({ attemptId, meId, onClose }: { attemptId: string; meId: st
             script={replay.script}
             names={replay.names}
             appearances={replay.appearances}
+            background={REPLAY_BG.src}
             renderEnd={(again) => (
               <div className="dialogue end">
                 <span className="text">{KIND_LABEL[replay.kind]}</span>

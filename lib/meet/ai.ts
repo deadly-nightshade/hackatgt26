@@ -1,8 +1,10 @@
 import type { z } from "zod";
 import { chatJson, type ChatMessage } from "@/lib/ai/chat";
+import { saysCozy, toneProblem } from "@/lib/ai/tone";
 import { CHAT_MODEL, config } from "@/lib/config";
 import { MIDDLE_LINES, SCENE_LINES, SCENES_PER_BATCH } from "@/lib/meet/config";
 import { guardAnalysis, hasConnection } from "@/lib/meet/guard";
+import { energyMatches } from "@/lib/meet/score";
 import {
   ANALYSIS_SYSTEM_PROMPT,
   buildAnalysisUserPrompt,
@@ -106,9 +108,27 @@ const analysisJsonSchema = toJsonSchema(AnalysisSchema);
 const dialogueJsonSchema = toJsonSchema(DialogueSchema);
 const scenesJsonSchema = toJsonSchema(SceneBatchSchema);
 
-function tidyLines(lines: DialogueLine[], bounds: { min: number; max: number }, what: string): Check<DialogueLine[]> {
+function tidyLines(lines: DialogueLine[], bounds: { min: number; max: number }, what: string, tone: { allowCozy: boolean }): Check<DialogueLine[]> {
+  // Tone is checked in code too: any offending line sends the whole batch back for a rewrite.
+  const problems = lines.flatMap((l, i) => {
+    const p = toneProblem(l.text, tone);
+    return p ? [`- ${what} line ${i + 1} "${l.text}": ${p}`] : [];
+  });
+  if (problems.length) return { ok: false, error: `Tone problems (keep it friendly, public places, no romance/bed words):\n${problems.join("\n")}` };
   const out = lines.slice(0, bounds.max);
   return out.length >= bounds.min ? { ok: true, value: out } : { ok: false, error: `- ${what}: need at least ${bounds.min} lines, got ${out.length}` };
+}
+
+/** "cozy" is only OK if one of them said it (their evidence quotes are near-verbatim answers). */
+export function toneFor(a: Profile, b: Profile): { allowCozy: boolean } {
+  const quotes = (p: Profile) => [
+    ...p.interests.map((i) => i.evidence),
+    ...p.wantsToTry.map((w) => w.evidence),
+    p.socialStyle.energyEvidence,
+    p.socialStyle.groupSizeEvidence,
+    p.socialStyle.planningEvidence,
+  ];
+  return { allowCozy: saysCozy([...quotes(a), ...quotes(b)]) };
 }
 
 export class MuseMeetAI implements MeetAI {
@@ -156,11 +176,12 @@ export class MuseMeetAI implements MeetAI {
       check: (raw) => {
         const parsed = parseWith(DialogueParseSchema, raw);
         if (!parsed.ok) return parsed;
-        const friends = tidyLines(parsed.value.friendsLines, MIDDLE_LINES, "friendsLines");
-        const clammed = tidyLines(parsed.value.clammedUpLines, MIDDLE_LINES, "clammedUpLines");
+        const tone = toneFor(a, b);
+        const friends = tidyLines(parsed.value.friendsLines, MIDDLE_LINES, "friendsLines", tone);
+        const clammed = tidyLines(parsed.value.clammedUpLines, MIDDLE_LINES, "clammedUpLines", tone);
         if (!friends.ok || !clammed.ok) return { ok: false, error: [friends, clammed].flatMap((c) => (c.ok ? [] : [c.error])).join("\n") };
         // Bad bump lines never cost a retry: the world falls back to template bubbles.
-        const bumpLines = tidyBumpLines(parsed.value.bumpLines);
+        const bumpLines = tidyBumpLines(parsed.value.bumpLines).filter((l) => !toneProblem(`${l.a} ${l.b}`, tone));
         if (bumpLines.length < parsed.value.bumpLines.length) log("meet-ai", "dropped malformed bumpLines", { kept: bumpLines.length });
         return { ok: true, value: { friendsLines: friends.value, clammedUpLines: clammed.value, bumpLines } };
       },
@@ -183,7 +204,7 @@ export class MuseMeetAI implements MeetAI {
         if (!parsed.ok) return parsed;
         const scenes: Scene[] = [];
         for (const s of parsed.value.scenes.slice(0, SCENES_PER_BATCH)) {
-          const lines = tidyLines(s.lines, SCENE_LINES, `scene "${s.topic}"`);
+          const lines = tidyLines(s.lines, SCENE_LINES, `scene "${s.topic}"`, toneFor(a, b));
           if (!lines.ok) return lines;
           scenes.push({ topic: s.topic, lines: lines.value });
         }
@@ -243,11 +264,11 @@ export function heuristicAnalysis(a: Profile, b: Profile, opts: { fuzzy: boolean
       : opts.fuzzy && sharedInterests[0]
         ? "throw themselves into their hobbies"
         : "love the seaside market";
-  const energyMatch = a.socialStyle.energy === b.socialStyle.energy || [a.socialStyle.energy, b.socialStyle.energy].includes("balanced");
+  const energyMatch = energyMatches(a.socialStyle, b.socialStyle);
   return {
     sharedInterests: sharedInterests.slice(0, 5),
     bridges: bridges.slice(0, 3),
-    styleNotes: { energyMatch, note: energyMatch ? "Their energy fits together nicely." : "One likes to go out, one likes to stay in." },
+    styleNotes: { energyMatch, note: energyMatch ? "Their energy fits together nicely." : "" },
     spotlight,
   };
 }
@@ -260,7 +281,7 @@ export class MockMeetAI implements MeetAI {
   }
 
   async dialogue(a: Profile, b: Profile, analysis: Analysis): Promise<Dialogue> {
-    const [A, B] = [a.displayName, b.displayName];
+    const [A, B] = ["{a}", "{b}"]; // placeholders, like the live model (filled when the scene plays)
     const topic = analysis.sharedInterests[0]?.label ?? analysis.bridges[0]?.label ?? "the market";
     return {
       friendsLines: [
@@ -292,8 +313,8 @@ export class MockMeetAI implements MeetAI {
       return {
         topic: batch ? `${topic} (round ${Math.floor(batch / SCENES_PER_BATCH) + 1})` : topic,
         lines: [
-          { speaker: "narrator", text: `${a.displayName} and ${b.displayName} spent the afternoon on ${topic}.`, mood: "happy" },
-          { speaker: "a", text: `This is fin-tastic, ${b.displayName}!`, mood: "excited" },
+          { speaker: "narrator", text: `{a} and {b} spent the afternoon at the market on ${topic}.`, mood: "happy" },
+          { speaker: "a", text: `This is fin-tastic, {b}!`, mood: "excited" },
           { speaker: "b", text: `Told you! Same time next tide?`, mood: "happy" },
           { speaker: "a", text: `Obviously.`, mood: "happy" },
         ],

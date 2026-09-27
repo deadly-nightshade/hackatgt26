@@ -1,3 +1,4 @@
+import { TONE_RULES } from "@/lib/ai/tone";
 import type { Analysis } from "@/lib/meet/schema";
 import { MIDDLE_LINES, SCENE_LINES, SCENES_PER_BATCH } from "@/lib/meet/config";
 import { PUN_BANK } from "@/lib/meet/templates";
@@ -13,7 +14,8 @@ export type FishView = {
   summary: string;
   interests: { name: string; category: string; tag: string }[];
   wantsToTry: { name: string; tag: string }[];
-  socialStyle: { energy: string; groupSize: string; planning: string };
+  /** null = unknown (never guess). */
+  socialStyle: { energy: string | null; groupSize: string | null; planning: string | null };
   residentFlavor: { marketStall: string; catchphrase: string };
 };
 
@@ -33,7 +35,7 @@ const CONTENT_RULES = `Content rules:
 - No sensitive topics: health, religion, politics, sexuality, ethnicity, money.
 - Only use facts from the profiles. Never invent hobbies, places, or history.`;
 
-export const ANALYSIS_SYSTEM_PROMPT = `You find common ground between two residents ("fish") of a cozy seaside-market social app, so they can have a cute friend-making cutscene and hang out in real life.
+export const ANALYSIS_SYSTEM_PROMPT = `You find common ground between two residents ("fish") of a seaside-market social app, so they can have a cute friend-making cutscene and hang out in real life.
 
 You get two profiles, A and B. Find what connects them:
 - sharedInterests: pairs of one interest from A and one interest from B that relate. Semantic matching is the point:
@@ -42,7 +44,7 @@ You get two profiles, A and B. Find what connects them:
   "loose" = same broad area (e.g. "bouldering" ~ "trail-running"),
   "stretch" = a playful but GROUNDED link (see below).
 - bridges: A wants to try something (A.wantsToTry) that B already does (B.interests), or vice versa. fromUser is the fish who WANTS to try it.
-- styleNotes.energyMatch: true if their socialStyle energy levels fit together; note: one short, kind sentence.
+- styleNotes.energyMatch: true only if both energies are known and the same (null means unknown); note: one short, kind sentence, or "" if unknown.
 - spotlight: the single best thing for them to talk about, written as a short verb phrase that completes "They both ___" (e.g. "love gacha games", "take food very seriously"). Lowercase, no trailing period.
 
 Hard rules:
@@ -66,10 +68,12 @@ export function buildAnalysisUserPrompt(a: FishView, b: FishView): string {
 }
 
 const DIALOGUE_STYLE = `Style:
-- Every line ≤ 90 characters. Casual, warm, a little silly, like Tomodachi Life.
+- Every line ≤ 90 characters. Casual, a little silly, like Tomodachi Life.
+- NEVER write the fish's real names. Write {a} for fish a and {b} for fish b, e.g. "Hey {b}, you play Valorant too?" — names are filled in when the scene plays.
 - Each fish sounds a bit like their profile (their market stall and catchphrase are hints, don't just repeat the catchphrase).
 - At most 2 fish puns per variant, only from this list: ${PUN_BANK.join(", ")}.
 - speaker is "a" or "b" (use "narrator" sparingly or not at all). mood is one of neutral, happy, excited, shy, sad.
+${TONE_RULES}
 ${CONTENT_RULES}`;
 
 export const DIALOGUE_SYSTEM_PROMPT = `You write the middle of a short friend-making cutscene between two fish at a seaside market. The intro, suspense beat and ending are added separately — write ONLY the conversation.
@@ -77,9 +81,7 @@ export const DIALOGUE_SYSTEM_PROMPT = `You write the middle of a short friend-ma
 Write TWO variants:
 - friendsLines (${MIDDLE_LINES.min}-${MIDDLE_LINES.max} lines): they chat happily about their REAL overlaps (use the connections given, especially the spotlight and any bridge).
 - clammedUpLines (${MIDDLE_LINES.min}-${MIDDLE_LINES.max} lines): shy and awkward, a few near-misses, but still touching on the spotlight connection, ending on a hopeful note.
-Use the fish's names naturally in the text where it helps.
-
-Also write bumpLines (${BUMP_LINES.min}-${BUMP_LINES.max} items): tiny speech-bubble exchanges for when these two fish bump into each other while wandering the island. a = fish a's bubble, b = fish b's reply. Each side AT MOST ${BUMP_MAX_WORDS} WORDS, lowercase-casual, about their real overlaps, one emoji allowed. Examples: { "a": "honkai star rail?", "b": "gaming!!" }, { "a": "skewers later?", "b": "always 🍢" }.
+Also write bumpLines (${BUMP_LINES.min}-${BUMP_LINES.max} items): tiny speech-bubble exchanges for when these two fish bump into each other while wandering the island. a = fish a's bubble, b = fish b's reply. Each side AT MOST ${BUMP_MAX_WORDS} WORDS, lowercase-casual, about their real overlaps, one emoji allowed, no names at all. Examples: { "a": "honkai star rail?", "b": "gaming!!" }, { "a": "skewers later?", "b": "always 🍢" }.
 
 ${DIALOGUE_STYLE}
 
@@ -103,18 +105,18 @@ function connectionsBlock(analysis: Analysis, names: Names): string {
 }
 
 function fishBlock(label: string, v: FishView): string {
-  return `Fish ${label} = ${v.displayName}. Stall: ${v.residentFlavor.marketStall}. Catchphrase: "${v.residentFlavor.catchphrase}". Vibe: ${v.summary}`;
+  return `Fish ${label} (write as {${label}}). Stall: ${v.residentFlavor.marketStall}. Catchphrase: "${v.residentFlavor.catchphrase}". Vibe: ${v.summary}`;
 }
 
 export function buildDialogueUserPrompt(a: FishView, b: FishView, analysis: Analysis): string {
-  return [fishBlock("a", a), fishBlock("b", b), connectionsBlock(analysis, { a: a.displayName, b: b.displayName }), "Write both variants."].join(
+  return [fishBlock("a", a), fishBlock("b", b), connectionsBlock(analysis, { a: "{a}", b: "{b}" }), "Write both variants."].join(
     "\n\n",
   );
 }
 
 export const SCENES_SYSTEM_PROMPT = `Two fish at a seaside market are already friends and keep hanging out in real life. Write ${SCENES_PER_BATCH} short hangout scenes for them.
 
-- Each scene is about a DIFFERENT connection from the list given (a shared interest, a bridge, or the spotlight), and shows them DOING the thing together (e.g. at the esports lounge, solving the daily crossword over skewers).
+- Each scene is about a DIFFERENT connection from the list given (a shared interest, a bridge, or the spotlight), and shows them DOING the thing together somewhere public (e.g. at the esports lounge, solving the daily crossword over skewers at the market).
 - Each scene: ${SCENE_LINES.min}-${SCENE_LINES.max} lines. topic = a short name for what they're doing.
 - Avoid topics that were already used (listed below, if any).
 - At most 2 fish puns per scene.
@@ -127,7 +129,7 @@ export function buildScenesUserPrompt(a: FishView, b: FishView, analysis: Analys
   return [
     fishBlock("a", a),
     fishBlock("b", b),
-    connectionsBlock(analysis, { a: a.displayName, b: b.displayName }),
+    connectionsBlock(analysis, { a: "{a}", b: "{b}" }),
     `Friendship level: ${opts.levelName}`,
     `Already-used topics: ${opts.usedTopics.join("; ") || "(none)"}`,
     `Write ${SCENES_PER_BATCH} scenes.`,

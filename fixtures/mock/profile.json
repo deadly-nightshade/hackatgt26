@@ -12,9 +12,11 @@
   ],
   "socialStyle": {
     "energy": "balanced",
+    "energyEvidence": "bouldering with a friend or two, then a movie on the couch",
     "groupSize": "small_group",
-    "planning": "spontaneous",
-    "evidence": "bouldering with a friend or two, then a movie on the couch"
+    "groupSizeEvidence": "with a friend or two",
+    "planning": null,
+    "planningEvidence": null
   },
   "traits": {
     "openness": { "score": 4, "confidence": 0.5, "evidence": "cook something new, maybe a Thai curry" },

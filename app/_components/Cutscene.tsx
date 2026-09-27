@@ -1,10 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { Appearance } from "@/lib/fish/appearance";
 import type { DialogueLine } from "@/lib/meet/schema";
-import { WORLD_BG } from "@/lib/world/config";
+import { REPLAY_BG_FILL, WORLD_BG } from "@/lib/world/config";
 import { FishSprite } from "./FishSprite";
 
 /** Shared by /meet and the /world replay modal. "a" stands on the left, "b" on the right. */
@@ -18,14 +18,29 @@ export function CutsceneStage({
   names,
   appearances = {},
   speaking,
+  background,
 }: {
   names: CutsceneNames;
   appearances?: CutsceneAppearances;
   speaking: DialogueLine["speaker"] | null;
+  /** A different backdrop (replays): fitted, not cropped. Falls back to the normal one if it fails to load. */
+  background?: string;
 }) {
+  const [failed, setFailed] = useState(false);
+  const alt = !!background && !failed;
+  const fill = { "--stage-top": REPLAY_BG_FILL.top, "--stage-bottom": REPLAY_BG_FILL.bottom } as CSSProperties;
   return (
-    <div className="stage">
-      <Image className="stage-bg" src={WORLD_BG.src} alt="" fill sizes="(max-width: 520px) 100vw, 480px" priority />
+    <div className={`stage${alt ? " stage-alt" : ""}`} style={alt ? fill : undefined}>
+      <Image
+        key={alt ? "alt" : "default"}
+        className="stage-bg"
+        src={alt ? background! : WORLD_BG.src}
+        alt=""
+        fill
+        sizes="(max-width: 520px) 100vw, 480px"
+        priority
+        onError={alt ? () => setFailed(true) : undefined}
+      />
       <StageFish name={names.a} appearance={appearances.a} side="left" active={speaking === "a"} />
       <StageFish name={names.b} appearance={appearances.b} side="right" active={speaking === "b"} />
     </div>
@@ -47,11 +62,13 @@ export function CutscenePlayer({
   script,
   names,
   appearances,
+  background,
   renderEnd,
 }: {
   script: DialogueLine[];
   names: CutsceneNames;
   appearances?: CutsceneAppearances;
+  background?: string;
   renderEnd: (replay: () => void) => ReactNode;
 }) {
   const [index, setIndex] = useState(0);
@@ -73,7 +90,7 @@ export function CutscenePlayer({
   const line = ended ? null : script[index];
   return (
     <>
-      <CutsceneStage names={names} appearances={appearances} speaking={line?.speaker ?? null} />
+      <CutsceneStage names={names} appearances={appearances} speaking={line?.speaker ?? null} background={background} />
       {line ? (
         <button type="button" className="dialogue" onClick={advance} aria-live="polite">
           {line.speaker !== "narrator" && <span className="speaker">{line.speaker === "a" ? names.a : names.b}</span>}

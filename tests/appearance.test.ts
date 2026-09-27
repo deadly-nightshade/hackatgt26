@@ -124,6 +124,29 @@ describe("storing appearance", () => {
     expect(await repo.setAppearance("missing-fish", DEFAULT_APPEARANCE)).toBe(false);
   });
 
+  it("redo onboarding updates the same fish in place: id, createdAt and look stay", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "fish-"));
+    const repo = new ConsoleFileRepository(dir);
+    const log = console.log;
+    console.log = () => {};
+    try {
+      const { id } = await repo.save({ profile: base, rawAnswers: [], appearance: { version: 1, head: "head-bow", feet: "feet-heels" } });
+      const before = (await repo.get(id))!;
+      await new Promise((r) => setTimeout(r, 5));
+      const redone = { ...base, summary: "A brand new me." };
+      expect(await repo.update(id, { profile: redone, rawAnswers: [{ questionId: "q1", transcript: "new" }] })).toBe(true);
+      const after = (await repo.get(id))!;
+      expect(after.id).toBe(id);
+      expect(after.profile.summary).toBe("A brand new me.");
+      expect(after.createdAt.getTime()).toBe(before.createdAt.getTime());
+      expect(after.updatedAt.getTime()).toBeGreaterThan(before.updatedAt.getTime()); // content changed → pair AI refreshes
+      expect(after.appearance).toEqual(before.appearance); // no look sent → kept
+      expect(await repo.update("missing-fish", { profile: redone, rawAnswers: [] })).toBe(false);
+    } finally {
+      console.log = log;
+    }
+  });
+
   it("a profile saved before this feature (no appearance field) loads as the plain fish", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "fish-"));
     await writeFile(path.join(dir, "old-fish.json"), JSON.stringify({ _id: "old-fish", createdAt: "2026-01-01", updatedAt: "2026-01-01", ...base }));
@@ -184,38 +207,21 @@ describe("appearance in API payloads", () => {
   });
 });
 
-describe("clammed up → no instant retry", () => {
-  it("a re-tap within the wait gets a 'still shy' scene (no roll, no AI); after it, a real roll", async () => {
+describe("clammed up → the next tap always works", () => {
+  it("after a clammed-up meet, tapping again (any time) makes them friends", async () => {
     const profiles = new MemoryProfiles();
     profiles.add("ann", { ...base, displayName: "Ann" });
     profiles.add("ben", { ...base, displayName: "Ben" });
     const pairs = new MemoryPairs();
-    let aiCalls = 0;
-    const mock = new MockMeetAI();
-    const ai: MeetAI = {
-      model: mock.model,
-      analyze: (...a) => (aiCalls++, mock.analyze(...a)),
-      dialogue: (...a) => (aiCalls++, mock.dialogue(...a)),
-      scenes: (...a) => (aiCalls++, mock.scenes(...a)),
-    };
-    const WAIT = 5 * 60_000;
     let clock = new Date("2026-09-20T12:00:00Z").getTime();
-    const tap = (forced: "friends" | "clammed_up") => {
-      const deps: MeetDeps = { profiles, pairs, ai, random: () => 0.5, now: () => new Date(clock), forcedOutcome: forced, strangerRetryMs: WAIT };
+    // random 0 = the roll would always fail; no explicit force.
+    const tap = () => {
+      clock += 10_000;
+      const deps: MeetDeps = { profiles, pairs, ai: new MockMeetAI(), random: () => 0, now: () => new Date(clock), forcedOutcome: null };
       return runMeet({ initiatorId: "ann", targetId: "ben" }, deps);
     };
-
-    expect((await tap("clammed_up")).outcome).toBe("clammed_up");
-    const calls = aiCalls;
-    clock += 60_000; // 1 minute later: too soon, even if it would succeed
-    const soon = await tap("friends");
-    expect(soon.outcome).toBe("cooldown");
-    expect(soon.script[0].text).toMatch(/still feeling a little shy/);
-    expect(aiCalls).toBe(calls);
-    expect((await pairs.getPair("ann__ben"))!.status).toBe("strangers");
-
-    clock += WAIT; // after the wait: a real roll
-    expect((await tap("friends")).outcome).toBe("friends");
+    expect((await tap()).outcome).toBe("clammed_up");
+    expect((await tap()).outcome).toBe("friends"); // 10s later, straight away
     expect((await pairs.getPair("ann__ben"))!.status).toBe("friends");
   });
 });

@@ -31,10 +31,10 @@ async function fetchFish(id: string): Promise<PublicFish | null> {
 
 const END_TEXT: Record<MeetResponse["outcome"], string> = {
   friends: "You made a new friend! 🐟",
-  clammed_up: "They clammed up this time… Tap their tag again in a while to try again 🐚",
+  clammed_up: "They clammed up this time… Tap their tag again to try again 🐚",
   already_friends: "Already reel friends! 🐟",
   hangout: "What a fin-tastic hangout! 🌊",
-  cooldown: "You two just hung out. Sea you later! 🌊", // friends; strangers get STILL_SHY
+  cooldown: "You two just hung out. Sea you later! 🌊",
 };
 
 export default function MeetScene({ targetId }: { targetId: string }) {
@@ -156,11 +156,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <main className="meet-shell">{children}</main>;
 }
 
-/** Strangers re-tapping too soon after a clammed-up meet (the server didn't roll again). */
-const STILL_SHY = "Still a bit shy… Tap their tag again in a while 🐚";
-
 function EndScreen({ meet, onReplay }: { meet: MeetResponse; onReplay: () => void }) {
-  const text = meet.outcome === "cooldown" && !meet.levelName ? STILL_SHY : END_TEXT[meet.outcome];
+  const text = END_TEXT[meet.outcome];
   return (
     <div className="dialogue end">
       <span className="text">{text}</span>
@@ -172,7 +169,7 @@ function EndScreen({ meet, onReplay }: { meet: MeetResponse; onReplay: () => voi
         </span>
       )}
       <div className="meet-actions">
-        {/* No "try again": a new meet only happens by tapping their tag again (after a while). */}
+        {/* No "try again": a new meet only happens by tapping their tag again (which then always works). */}
         <button onClick={onReplay}>Replay</button>
         <Link className="button secondary" href="/world">
           Back to island

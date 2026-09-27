@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { FishCreator } from "@/app/_components/FishCreator";
 import { DEFAULT_APPEARANCE, getAppearance, sameAppearance, type Appearance } from "@/lib/fish/appearance";
 import { FISH_ID_HEADER, getFishId } from "@/lib/meet/identity";
-import type { Profile } from "@/lib/profile/schema";
+import type { ProfileView } from "@/lib/profile/schema";
 import ReviewProfile from "../onboarding/ReviewProfile";
+import { ProfileEditor } from "./ProfileEditor";
 
 type Save = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string };
 
@@ -15,12 +16,21 @@ type Save = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: 
 export default function MePage() {
   const router = useRouter();
   const [id, setId] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<ProfileView | null>(null);
   const [saved, setSaved] = useState<Appearance>(DEFAULT_APPEARANCE);
   const [look, setLook] = useState<Appearance>(DEFAULT_APPEARANCE);
   const [save, setSave] = useState<Save>({ kind: "idle" });
   const [tagUrl, setTagUrl] = useState("");
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [quick, setQuick] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const onDirtyChange = useCallback((d: boolean) => setDirty(d), []);
+  /** Unsaved profile edits: confirm before following a link away. */
+  const guard = (e: MouseEvent) => {
+    if (dirty && !window.confirm("You have unsaved changes. Leave without saving?")) e.preventDefault();
+  };
 
   useEffect(() => {
     const fishId = getFishId();
@@ -32,6 +42,7 @@ export default function MePage() {
       .then((j) => {
         const appearance = getAppearance(j.appearance);
         setProfile(j.profile);
+        setQuick(j.onboardingMode === "quick");
         setSaved(appearance);
         setLook(appearance);
       })
@@ -63,7 +74,9 @@ export default function MePage() {
   return (
     <main className="creator-page">
       <p className="me-back">
-        <Link href="/world">← Back to island</Link>
+        <Link href="/world" onClick={guard}>
+          ← Back to island
+        </Link>
       </p>
       <h1>{profile.displayName} 🐟</h1>
       <section className="card me-look">
@@ -92,7 +105,35 @@ export default function MePage() {
         </p>
       </section>
 
-      <ReviewProfile profile={profile} readOnly />
+      {editing && id ? (
+        <ProfileEditor
+          fishId={id}
+          profile={profile}
+          onDirtyChange={onDirtyChange}
+          onCancel={() => {
+            if (dirty && !window.confirm("Discard your changes?")) return;
+            setDirty(false);
+            setEditing(false);
+          }}
+          onSaved={(p) => {
+            setProfile(p);
+            setDirty(false);
+            setEditing(false);
+            setNotice("Profile saved ✨");
+          }}
+        />
+      ) : (
+        <>
+          <div className="row me-profile-actions">
+            <button type="button" onClick={() => (setNotice(null), setEditing(true))}>
+              Edit profile ✏️
+            </button>
+            {notice && <span className="creator-status ready">{notice}</span>}
+          </div>
+          {quick && <p className="hint">Add more interests anytime in Edit profile ✏️</p>}
+          <ReviewProfile profile={profile} readOnly />
+        </>
+      )}
       <section className="card">
         <h2>Your NFC tag</h2>
         <p className="muted">Write this URL on your tag. Friends tap it to meet you.</p>
@@ -112,7 +153,13 @@ export default function MePage() {
         </button>
       </section>
       <p>
-        <Link href="/world">Back to island</Link> · <Link href="/onboarding">Redo onboarding</Link>
+        <Link href="/world" onClick={guard}>
+          Back to island
+        </Link>{" "}
+        ·{" "}
+        <Link href="/onboarding" onClick={guard}>
+          Redo my answers
+        </Link> <span className="muted">(keeps your friends)</span>
       </p>
     </main>
   );
