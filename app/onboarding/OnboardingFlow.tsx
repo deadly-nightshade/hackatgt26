@@ -18,9 +18,6 @@ type Step = "name" | "questions" | "creator" | "review" | "saved";
 /** Profile extraction runs in the background while the user dresses their fish. */
 type Extraction = { status: "idle" | "running" | "done" } | { status: "error"; message: string };
 
-/** The chosen look survives a refresh until the profile is confirmed. */
-const LOOK_KEY = "onboarding-appearance";
-
 type AnswerState = {
   main: string;
   checked: boolean; // answer-quality check already ran (max 1 follow-up per question)
@@ -29,6 +26,45 @@ type AnswerState = {
 };
 
 const emptyAnswer = (): AnswerState => ({ main: "", checked: false, followUpAnswer: "" });
+
+/**
+ * Everything typed so far survives a refresh (or the phone killing the tab, or a 504 mid-build)
+ * until the profile is confirmed.
+ */
+const DRAFT_KEY = "onboarding-draft";
+
+type Draft = {
+  v: 1;
+  step: Exclude<Step, "saved">;
+  displayName: string;
+  quick: boolean;
+  qIndex: number;
+  answers: Record<string, AnswerState>;
+  discoverable: boolean;
+  appearance: Appearance | null; // null → not picked in this draft yet
+  profile: Profile | null;
+};
+
+function readDraft(): Draft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    const d = raw ? JSON.parse(raw) : null;
+    return d?.v === 1 ? (d as Draft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Gateway timeouts / dropped connections — the answers are safe, so just say retry. */
+const HICCUP = "Connection hiccup — your answers are saved. Tap Retry.";
 
 /** Follow-up answers are appended to that question's transcript. */
 function finalTranscript(a: AnswerState): string {
@@ -94,12 +130,8 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
         setExisting({ id, displayName: j.profile.displayName });
         setDiscoverable(j.discoverable === true);
         setDisplayName((n) => n || j.profile.displayName);
-        // Keep their current look unless they already picked one this session.
-        try {
-          if (sessionStorage.getItem(LOOK_KEY)) return;
-        } catch {
-          // ignore
-        }
+        // Keep their current look unless they already picked one in this draft.
+        if (readDraft()?.appearance) return;
         setAppearance(getAppearance(j.appearance));
       })
       .catch(() => {});
@@ -110,22 +142,73 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
   // Only the latest extraction counts (answers can be edited and re-submitted).
   const extractRun = useRef(0);
 
+  const [lookPicked, setLookPicked] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  /** Restored mid-build without a profile → re-run extraction once the restored state has rendered. */
+  const [rebuild, setRebuild] = useState(false);
+
   useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem(LOOK_KEY);
-      if (saved) setAppearance(getAppearance(JSON.parse(saved)));
-    } catch {
-      // private mode etc. — start from the plain fish
+    const d = readDraft();
+    if (d) {
+      const count = d.quick ? allQuestions.filter((qq) => qq.id === QUICK_QUESTION_ID).length : allQuestions.length;
+      setDisplayName(d.displayName ?? "");
+      setQuick(!!d.quick);
+      setQIndex(Math.max(0, Math.min(d.qIndex ?? 0, count - 1)));
+      setAnswers(d.answers ?? {});
+      setDiscoverable(!!d.discoverable);
+      if (d.appearance) {
+        setAppearance(getAppearance(d.appearance));
+        setLookPicked(true);
+      }
+      if (d.step === "creator" || d.step === "review") {
+        if (d.profile) {
+          setProfile(d.profile);
+          setExtraction({ status: "done" });
+          setStep(d.step);
+        } else {
+          setStep("creator");
+          setRebuild(true);
+        }
+      } else setStep(d.step);
+      setHasDraft(true);
     }
+    setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || step === "saved") return;
+    const draft: Draft = { v: 1, step, displayName, quick, qIndex, answers, discoverable, appearance: lookPicked ? appearance : null, profile };
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // private mode etc. — still kept in state
+    }
+  }, [hydrated, step, displayName, quick, qIndex, answers, discoverable, appearance, lookPicked, profile]);
+
+  useEffect(() => {
+    if (!rebuild) return;
+    setRebuild(false);
+    void buildProfile();
+  }, [rebuild]);
+
   const chooseLook = (next: Appearance) => {
     setAppearance(next);
-    try {
-      sessionStorage.setItem(LOOK_KEY, JSON.stringify(next));
-    } catch {
-      // not persisted; still kept in state
-    }
+    setLookPicked(true);
   };
+
+  function startOver() {
+    clearDraft();
+    setHasDraft(false);
+    setDisplayName(existing?.displayName ?? "");
+    setQuick(false);
+    setQIndex(0);
+    setAnswers({});
+    setProfile(null);
+    setExtraction({ status: "idle" });
+    setLookPicked(false);
+    setAppearance(DEFAULT_APPEARANCE);
+  }
 
   const questionAudio = useAudioPlayer();
   const followUpAudio = useAudioPlayer();
@@ -210,17 +293,19 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ displayName: displayName.trim(), answers: rawAnswers() }),
-        signal: AbortSignal.timeout(75_000),
+        signal: AbortSignal.timeout(130_000), // the server answers within its 120s maxDuration
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || `Something went wrong (${res.status})`);
+      // A 504 from the host has no JSON error body → treat it as a connection hiccup.
+      if (!res.ok) throw new Error(json.error || (res.status >= 502 ? HICCUP : `Something went wrong (${res.status})`));
       if (run !== extractRun.current) return;
       setProfile(json.profile);
       setExtraction({ status: "done" });
     } catch (err) {
       if (run !== extractRun.current) return;
       const e = err as Error;
-      setExtraction({ status: "error", message: e.name === "TimeoutError" ? "That took too long — please try again." : e.message });
+      const message = e.name === "TimeoutError" ? "That took too long — your answers are saved. Tap Retry." : e instanceof TypeError ? HICCUP : e.message;
+      setExtraction({ status: "error", message });
     }
   }
 
@@ -246,11 +331,7 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
       if (!res.ok) throw new Error(json.error || `Save failed (${res.status})`);
       setSavedId(json.id);
       setFishId(json.id);
-      try {
-        sessionStorage.removeItem(LOOK_KEY);
-      } catch {
-        // ignore
-      }
+      clearDraft();
       setStep("saved");
       if (returnTo) router.replace(returnTo);
     } catch (err) {
@@ -285,7 +366,23 @@ export default function OnboardingFlow({ questions: allQuestions, returnTo }: { 
             Start
           </button>
         </div>
-        {!existing && <FindMyFish initialName={displayName} onFound={() => router.replace(returnTo ?? "/world")} />}
+        {hasDraft && (
+          <p className="muted">
+            Picking up where you left off.{" "}
+            <button type="button" className="secondary" onClick={startOver}>
+              Start over
+            </button>
+          </p>
+        )}
+        {!existing && (
+          <FindMyFish
+            initialName={displayName}
+            onFound={() => {
+              clearDraft();
+              router.replace(returnTo ?? "/world");
+            }}
+          />
+        )}
       </main>
     );
   }

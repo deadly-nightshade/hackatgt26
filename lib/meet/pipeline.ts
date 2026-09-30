@@ -41,7 +41,32 @@ export type MeetDeps = {
   forcedOutcome?: ForcedOutcome | null;
   hangoutsEnabled?: boolean;
   cooldownMs?: number;
+  /** How long the AI may take per request before template lines are used instead (tests shorten it). */
+  aiBudgetMs?: number;
+  /** Keeps work alive after the response is sent (the route passes next/server's `after`). */
+  background?: (task: Promise<unknown>) => void;
 };
+
+/**
+ * The host kills /api/meet at maxDuration (120s) with a bare 504, and then the template fallback never
+ * runs. Live timings: analysis ~20–25s, then dialogue ~35–40s. Past this budget the meet plays template
+ * lines, and the AI keeps going in the background so the pair's next meet/hangout gets the real ones.
+ */
+const AI_BUDGET_MS = 90_000;
+
+class DeadlineError extends Error {}
+
+/** Rejects if `p` hasn't settled by `deadline` (epoch ms). The AI call keeps running; its answer is just ignored. */
+function beforeDeadline<T>(p: Promise<T>, deadline: number, label: string): Promise<T> {
+  const ms = deadline - Date.now();
+  if (ms <= 0) return Promise.reject(new DeadlineError(`${label}: out of time`));
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DeadlineError(`${label}: took longer than ${Math.round(ms / 1000)}s`)), ms);
+  });
+  p.catch(() => {}); // a late failure after the deadline must not be an unhandled rejection
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
 
 export type MeetInput = {
   initiatorId: string;
@@ -121,6 +146,31 @@ function fallbackContent(a: StoredProfile, b: StoredProfile): Content {
   return { analysis, similarity: scoreAnalysis(analysis), dialogue: { friendsLines: [], clammedUpLines: [] }, bumpLines: [], usedFallback: true };
 }
 
+function contentFields(content: Content, model: string, A: StoredProfile, B: StoredProfile): Partial<Pair> {
+  return {
+    analysis: content.analysis,
+    similarity: content.similarity,
+    dialogue: content.dialogue,
+    bumpLines: content.bumpLines,
+    promptVersion: PROMPT_VERSION,
+    model,
+    profilesUpdatedAt: [A.contentUpdatedAt, B.contentUpdatedAt],
+  };
+}
+
+/** A late AI answer: re-read the pair (the meet has saved it since) and add only the cached content. */
+async function cacheLateContent(deps: MeetDeps, pairKey: string, content: Content, A: StoredProfile, B: StoredProfile) {
+  if (content.usedFallback) return;
+  try {
+    const fresh = await deps.pairs.getPair(pairKey);
+    if (!fresh) return;
+    await deps.pairs.savePair({ ...fresh, ...contentFields(content, deps.ai.model, A, B) });
+    log("meet", `${pairKey}: cached late AI content for next time`);
+  } catch (err) {
+    log("meet", `${pairKey}: couldn't cache late AI content: ${(err as Error).message}`);
+  }
+}
+
 async function loadProfile(deps: MeetDeps, id: string): Promise<StoredProfile> {
   const p = await deps.profiles.get(id);
   if (!p) throw new HttpError(404, `No fish with id ${id}`);
@@ -133,6 +183,7 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
   if (initiatorId === targetId) throw new HttpError(400, "That's your own tag, silly fish!");
   const now = (deps.now ?? (() => new Date()))();
   const callsBefore = getUsageTotals().calls;
+  const deadline = Date.now() + (deps.aiBudgetMs ?? AI_BUDGET_MS);
 
   // 1. Load both profiles, in pair order (a = smaller id).
   const [initiator, target] = await Promise.all([loadProfile(deps, initiatorId), loadProfile(deps, targetId)]);
@@ -236,17 +287,18 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
       job = generateContent(deps.ai, A, B, pairKey).finally(() => inflight.delete(pairKey));
       inflight.set(pairKey, job);
     }
-    const content = await job;
+    let content: Content;
+    try {
+      content = await beforeDeadline(job, deadline, "meet AI");
+    } catch (err) {
+      if (!(err instanceof DeadlineError)) throw err;
+      // Too slow for this request: play templates now, cache the AI's answer for next time.
+      log("meet", `${pairKey}: ${err.message}, using template lines (AI continues in background)`);
+      (deps.background ?? ((t) => void t))(job.then((late: Content) => cacheLateContent(deps, pairKey, late, A, B)));
+      content = fallbackContent(A, B);
+    }
     if (!content.usedFallback) {
-      Object.assign(pair, {
-        analysis: content.analysis,
-        similarity: content.similarity,
-        dialogue: content.dialogue,
-        bumpLines: content.bumpLines,
-        promptVersion: PROMPT_VERSION,
-        model: deps.ai.model,
-        profilesUpdatedAt: [A.contentUpdatedAt, B.contentUpdatedAt],
-      } satisfies Partial<Pair>);
+      Object.assign(pair, contentFields(content, deps.ai.model, A, B));
       await deps.pairs.savePair(pair);
     }
     return { content, refreshed: !content.usedFallback };
@@ -259,7 +311,7 @@ export async function runMeet(input: MeetInput, deps: MeetDeps): Promise<MeetRes
     if (!(deps.hangoutsEnabled ?? meetConfig.hangoutsEnabled())) {
       return respond({ outcome: "already_friends", script: alreadyFriendsScript(scriptInput(analysis, [])), similarity, analysis });
     }
-    return runHangout({ deps, input, pair, A, B, analysis, similarity, now, scriptInput, respond, getContent });
+    return runHangout({ deps, input, pair, A, B, analysis, similarity, now, deadline, scriptInput, respond, getContent });
   }
 
   // 3–8. Get or create the cached content.
@@ -315,6 +367,7 @@ async function runHangout(ctx: {
   analysis: Analysis;
   similarity: number;
   now: Date;
+  deadline: number;
   scriptInput: (analysis: Analysis, middle: DialogueLine[]) => ScriptInput;
   respond: (r: { outcome: MeetOutcome; script: DialogueLine[]; similarity: number; analysis: Analysis; usedFallback?: boolean; leveledUp?: boolean }) => Promise<MeetResponse>;
   getContent: () => Promise<{ content: Content; refreshed: boolean }>;
@@ -352,10 +405,14 @@ async function runHangout(ctx: {
     const levelRose = pair.level > (pair.sceneBatchLevel ?? 0);
     if (firstBatch || freshScenesNeeded || (levelRose && pair.sceneBatchesGenerated < LEVELS.length)) {
       try {
-        const scenes = await deps.ai.scenes(ctx.A.profile, ctx.B.profile, analysis, {
-          levelName: levelName(pair.level),
-          usedTopics: pair.hangoutScenes.map((s) => s.topic),
-        });
+        const scenes = await beforeDeadline(
+          deps.ai.scenes(ctx.A.profile, ctx.B.profile, analysis, {
+            levelName: levelName(pair.level),
+            usedTopics: pair.hangoutScenes.map((s) => s.topic),
+          }),
+          ctx.deadline,
+          "scenes",
+        );
         const fresh = scenes.map((s) => ({ id: randomUUID(), topic: s.topic, lines: s.lines }));
         pair.hangoutScenes.push(...fresh);
         pair.sceneBatchesGenerated += 1;

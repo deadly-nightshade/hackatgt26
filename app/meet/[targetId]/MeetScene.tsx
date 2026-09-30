@@ -29,6 +29,8 @@ async function fetchFish(id: string): Promise<PublicFish | null> {
   return (await res.json()) as PublicFish;
 }
 
+const HICCUP = "The waves got choppy (connection hiccup) — try again?";
+
 const END_TEXT: Record<MeetResponse["outcome"], string> = {
   friends: "You made a new friend! 🐟",
   clammed_up: "They clammed up this time… Tap their tag again to try again 🐚",
@@ -54,17 +56,18 @@ export default function MeetScene({ targetId }: { targetId: string }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ initiatorId, targetId }),
-          signal: AbortSignal.timeout(90_000),
+          signal: AbortSignal.timeout(130_000), // the server answers within its 120s maxDuration
         });
         const json = await res.json().catch(() => ({}));
         if (res.status === 404) return setPhase({ kind: "not_found" });
-        if (!res.ok) throw new Error(json.error || `Something went wrong (${res.status})`);
+        // A 504 from the host has no JSON body → a connection hiccup, not a real error.
+        if (!res.ok) throw new Error(json.error || (res.status >= 502 ? HICCUP : `Something went wrong (${res.status})`));
         const result = json as MeetResponse;
         if (result.debug) console.log("[meet debug]", result.debug);
         setPhase({ kind: "playing", meet: result });
       } catch (err) {
         const e = err as Error;
-        setPhase({ kind: "error", message: e.name === "TimeoutError" ? "The tide was too slow — try again?" : e.message });
+        setPhase({ kind: "error", message: e.name === "TimeoutError" ? "The tide was too slow — try again?" : e instanceof TypeError ? HICCUP : e.message });
       }
     },
     [targetId],
@@ -142,7 +145,14 @@ export default function MeetScene({ targetId }: { targetId: string }) {
       )}
       {phase.kind === "error" && (
         <div className="meet-actions">
-          <p className="muted">Tap their tag again to try again 🌊</p>
+          <button
+            onClick={() => {
+              const fishId = getFishId();
+              if (fishId) void meet(fishId);
+            }}
+          >
+            Try again
+          </button>
           <Link className="button secondary" href="/world">
             Back to beach
           </Link>

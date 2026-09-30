@@ -11,3 +11,6 @@ next-env.d.ts
 
 # local runtime data (profiles, AI cache)
 data/
+
+# Vercel log exports (contain user profiles / ids)
+hackatgt26-log-export-*.json

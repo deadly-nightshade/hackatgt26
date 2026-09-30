@@ -24,7 +24,8 @@ With the default `AI_MODE=mock`, the whole flow runs with **zero API calls**: tr
 | `npm test` | Vitest: the Zod schema rejects malformed output; toWav → 16 kHz mono s16 (parses the WAV header) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run extract:fixtures [-- --only rich,messy]` | Runs `extractProfile` on `fixtures/answers/*.json` and checks each result: schema valid, every interest has evidence, and none of the fixture's `mustNotContain` sensitive terms appear. Needs `AI_MODE=live` for real output |
-| `npm run remove:fish -- <id> [<id> ...]` | Deletes those fish (profiles) and every pair + meet attempt involving them. Respects `STORAGE`. Get ids from `npm run list:fish` |
+| `npm run unfriend -- <idA> <idB> [<idC> <idD> ...]` | Deletes the pair between each two fish plus its whole meet history, so they're strangers who've never met again: gone from each other's beach, and the next tap is a fresh first meet. Both fish stay. Respects `STORAGE` |
+| `npm run remove:fish -- <id> [<id> ...] --yes` | Without `--yes` it's a dry run that lists what would go. With `--yes` it deletes those fish (profiles) and every pair + meet attempt involving them. Respects `STORAGE`. Get ids from `npm run list:fish` |
 | `npm run merge:fish -- --from <newId> --into <oldId>` | Someone onboarded twice? Copies the new fish's profile, answers and look onto the old fish in place. The old fish keeps its id, friendships, levels and history. Backs up the old profile to `data/backups/` first and deletes nothing |
 | `npm run recs -- <userId> [--force]` | Prints that fish's "Find fish" suggestions, where they came from (cache / AI / fallback) and AI usage. `--force` skips the 30-minute refresh window |
 | `npm run build:scene` | Crops the raw art in `public/art/world/` into the `/world` scene sprites (`public/world/scene/`) and crops the ice cream stand + its counter front. Re-run after replacing art |
@@ -186,4 +187,5 @@ Up to 3 people you haven't met who share interests, so you go find them in perso
 
 
 fih list: npm run list:fish
-npm run remove:fish -- <id-1> <id-2> etc
+npm run remove:fish -- <id-1> <id-2> etc (REMOVE FIH NOT TO BE CONFUSED WITH UNFRIENDING FIH)
+npm run unfriend -- <idA> <idB> <idC> <idD> (unfriend fih!)

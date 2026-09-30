@@ -2,7 +2,10 @@
  * Remove fish (profiles) by id, plus every pair + meet attempt involving them
  * (respects STORAGE, like the app). Get ids from `npm run list:fish`.
  *
- *   npm run remove:fish -- <id> [<id> ...]
+ *   npm run remove:fish -- <id> [<id> ...]          # dry run: shows what would be deleted
+ *   npm run remove:fish -- <id> [<id> ...] --yes    # actually deletes (permanent!)
+ *
+ * Only want to end a friendship? Use `npm run unfriend -- <idA> <idB>` instead.
  */
 import "./loadEnv";
 import { getPairRepository, getProfileRepository } from "@/lib/storage";
@@ -16,6 +19,16 @@ async function main() {
     return;
   }
   const profiles = getProfileRepository();
+  if (!process.argv.includes("--yes")) {
+    console.log("DRY RUN — nothing deleted. This would PERMANENTLY delete these fish (profile + every pair + meet history):");
+    for (const id of ids) {
+      const fish = await profiles.get(id);
+      const pairCount = fish ? (await getPairRepository().listPairsForUser(id)).length : 0;
+      console.log(fish ? `  ${id}  ${fish.profile.displayName}  (${pairCount} pair(s))` : `  ${id}  (no such fish)`);
+    }
+    console.log("\nRe-run with --yes to delete. Just ending a friendship? Use: npm run unfriend -- <idA> <idB>");
+    return;
+  }
   for (const id of ids) {
     const fish = await profiles.get(id);
     if (!fish) {

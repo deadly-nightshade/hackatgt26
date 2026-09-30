@@ -285,6 +285,43 @@ describe("runMeet", () => {
     expect(ai.calls.analyze).toBe(2);
   });
 
+  it("slow AI → answers with templates before the host timeout (friendship still saved)", async () => {
+    // Answers far past the budget (then fails, like the SDK's own timeout), so no job is left hanging.
+    const tooSlow = () => new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 200));
+    const slow: MeetAI = { model: "test", analyze: tooSlow, dialogue: tooSlow, scenes: tooSlow };
+    const t = setup({ ai: new CountingAI(slow), forced: "friends" });
+    t.deps.aiBudgetMs = 50;
+    const r = await t.tap();
+    expect(r.outcome).toBe("friends");
+    expect(r.debug?.usedFallback).toBe(true);
+    expect(t.pairs.pairs.get("alice__bob")?.status).toBe("friends");
+    await new Promise((r) => setTimeout(r, 250)); // let the slow job settle before the next test
+  });
+
+  it("late AI answer → templates now, cached in the background for the next meet", async () => {
+    const inner = new MockMeetAI();
+    const late = <T,>(p: Promise<T>) => new Promise<T>((r) => setTimeout(() => r(p), 80));
+    const slow: MeetAI = {
+      model: "test",
+      analyze: (a, b) => late(inner.analyze(a, b)),
+      dialogue: (a, b, x) => inner.dialogue(a, b, x),
+      scenes: (a, b, x, o) => inner.scenes(a, b, x, o),
+    };
+    const ai = new CountingAI(slow);
+    const t = setup({ ai, forced: "clammed_up" });
+    const tasks: Promise<unknown>[] = [];
+    t.deps.aiBudgetMs = 20;
+    t.deps.background = (task) => tasks.push(task);
+    const first = await t.tap();
+    expect(first.debug?.usedFallback).toBe(true);
+    expect(tasks).toHaveLength(1);
+    await Promise.all(tasks);
+    expect(t.pairs.pairs.get("alice__bob")?.dialogue).toBeDefined();
+    const second = await t.tap(); // uses the cached AI content, no new calls
+    expect(second.debug?.usedFallback).toBe(false);
+    expect(ai.calls.analyze).toBe(1);
+  });
+
   it("404s for an unknown fish and 400s for yourself", async () => {
     const t = setup();
     await expect(t.tap("alice", "nobody")).rejects.toMatchObject({ status: 404 });

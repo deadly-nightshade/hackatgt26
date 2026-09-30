@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getFishId, setFishId } from "@/lib/meet/identity";
+import { clearFishId, getFishId, setFishId } from "@/lib/meet/identity";
 
 type User = { id: string; displayName: string; isSeed: boolean; discoverable: boolean };
 
@@ -70,7 +70,22 @@ export default function WhoAmI({ users }: { users: User[] }) {
         {me && (
           <>
             {" "}
-            · <Link href="/world">Go to my beach →</Link>
+            · <Link href="/world">Go to my beach →</Link> ·{" "}
+            <button
+              className="secondary"
+              onClick={() => {
+                clearFishId();
+                setMe(null);
+              }}
+            >
+              Log out
+            </button>
+          </>
+        )}
+        {!me && (
+          <>
+            {" "}
+            · <Link href="/onboarding">Make a new fish →</Link>
           </>
         )}
       </p>

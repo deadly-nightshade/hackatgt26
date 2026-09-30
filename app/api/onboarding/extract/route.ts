@@ -6,7 +6,7 @@ import { AnswerSchema } from "@/lib/profile/schema";
 import { HttpError, readJson, withRoute } from "@/lib/util/log";
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // extraction + one retry, 30s timeout each
+export const maxDuration = 120; // extraction + one retry, 30s timeout each (+ an SDK retry): 60s wasn't enough live
 
 /** Mock mode answers instantly; fake the model's think time so the creator's waiting state is testable. */
 const MOCK_DELAY_MS = 4000;

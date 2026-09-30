@@ -59,3 +59,19 @@ export function setFishId(id: string) {
   }
   writeCookie(id);
 }
+
+/** Forget this browser's fish (dev "log out"): clears both copies so getFishId() can't heal it back. */
+export function clearFishId() {
+  try {
+    localStorage.removeItem(FISH_ID_KEY);
+    localStorage.removeItem("onboarding-draft");
+  } catch {
+    // ignore
+  }
+  try {
+    const secure = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${FISH_ID_KEY}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+  } catch {
+    // ignore
+  }
+}
